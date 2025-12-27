@@ -1,9 +1,13 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const GeneratedStruct = @import("arg_structs.zig").GeneratedStruct;
+const arg_struct = @import("arg_structs.zig");
+const Io = std.Io;
 
-pub fn parseArgs(allocator: Allocator, comptime args_def: anytype) !GeneratedStruct(args_def) {
-    const ResultType = GeneratedStruct(args_def);
+pub const ArgsStruct = arg_struct.ArgsStruct;
+pub const Arg = arg_struct.Arg;
+
+pub fn parseArgs(allocator: Allocator, comptime args_def: anytype, stderr: *Io.Writer) !ArgsStruct(args_def) {
+    const ResultType = ArgsStruct(args_def);
     var result: ResultType = undefined;
 
     var args_iter = try std.process.argsWithAllocator(allocator);
@@ -18,7 +22,7 @@ pub fn parseArgs(allocator: Allocator, comptime args_def: anytype) !GeneratedStr
     inline for (struct_fields) |field| {
         const arg_str = args_iter.next() orelse {
             std.debug.print("\n[ERROR] Missing argument: '{s}'\n\n", .{field.name});
-            printUsage(args_def);
+            try printUsage(args_def, stderr);
             return error.MissingArgument;
         };
         const parsed_val = try parseValue(field.type, arg_str);
@@ -57,9 +61,9 @@ fn parseValue(comptime T: type, str: []const u8) !T {
 }
 
 
-fn printUsage(comptime args_def: anytype) void {
+fn printUsage(comptime args_def: anytype, writer: *Io.Writer) !void {
 
-    std.debug.print("Usage: app", .{});
+    try writer.print("Usage: app", .{});
     inline for (args_def) |arg| {
         std.debug.print(" <{s}>", .{arg.field_name});
     }

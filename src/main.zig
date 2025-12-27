@@ -1,18 +1,26 @@
 const std = @import("std");
 const eaz = @import("easy_args_zig");
-const Arg = eaz.Arg;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
+    
+    // var buffer: [1024]u8 = undefined;
+    // var stdout_writer = std.fs.File.stdout().writer(&buffer);
+    // const stdout = &stdout_writer.interface;
 
+    var buferr: [1024]u8 = undefined;
+    var stderr_writer = std.fs.File.stdout().writer(&buferr);
+    const stderr = &stderr_writer.interface;
+    
     const definitions = .{
-        Arg(u32, "limit", "Limits are meant to be broken"),
-        Arg(bool, "verbose", "print a little, or print a lot"),
-        Arg([]const u8, "username", "who are you dear?"), // Added a string to prove it works
+        eaz.Arg(u32, "limit", "Limits are meant to be broken"),
+        eaz.Arg(bool, "verbose", "print a little, or print a lot"),
+        eaz.Arg([]const u8, "username", "who are you dear?"), // Added a string to prove it works
     };
-    const config = eaz.parseArgs(allocator, definitions) catch |err| {
+
+    const config = eaz.parseArgs(allocator, definitions, stderr) catch |err| {
         std.debug.print("Failed to parse args: {any}\n", .{err});
         return;
     };

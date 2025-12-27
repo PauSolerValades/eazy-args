@@ -1,5 +1,5 @@
 const std = @import("std");
-const Type = std.builtin.Type;
+const Type = std.Type;
 
 /// Creates the Argument Structure
 /// name uses [:0] to avoid the \0 string
@@ -11,21 +11,17 @@ pub fn Arg(comptime T: type, comptime name: [:0]const u8, comptime description: 
     };
 }
 
-pub fn OptArg(comptime T: type, comptime name: [:0]const u8, comptime short: [:0]const u8, default: T, comptime description: []const u8) !type {
+pub fn OptArg(comptime T: type, comptime name: [:0]const u8, comptime short: [:0]const u8, default: T, comptime description: []const u8) {
     // validate both name and short start with -- and - respectively
-    if (name[0] == '-' and name[1] == '-') return error.InvalidOptionFormat;
-    if (short[0] == '-') return error.InvalidOptionFormat;
 
+    if (name[0] == '-' and name[1] == '-') return error.InvalidOptionFormat;
     return struct {
-        pub const type_id = T;
-        pub const field_name = name;
-        pub const field_short = short;
-        pub const default_value = default;
-        pub const help = description;
-    };
+
+    }
+
 }
 
-pub fn ArgsStruct(comptime args_tuple: anytype) type {
+fn GeneratedStruct(comptime args_tuple: anytype) type {
     const len = args_tuple.len;
     
     var names: [len][]const u8 = undefined;
