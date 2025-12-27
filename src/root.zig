@@ -1,59 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-
-/// Creates the Argument Structure
-/// name uses [:0] to avoid the \0 string
-pub fn Arg(comptime T: type, comptime name: [:0]const u8, comptime description: []const u8) type {
-    return struct {
-        pub const type_id = T;
-        pub const field_name = name;
-        pub const help = description;
-    };
-}
-
-fn GeneratedStruct(comptime args_tuple: anytype) type {
-    const len = args_tuple.len;
-    
-    var names: [len][]const u8 = undefined;
-    var types: [len]type = undefined;
-    
-    // fill the attributes
-    var attrs: [len]std.builtin.Type.StructField.Attributes = undefined;
-
-    inline for (args_tuple, 0..) |arg, i| {
-        names[i] = arg.field_name;
-        types[i] = arg.type_id;
-        
-        attrs[i] = .{
-            .default_value_ptr = null,  // no fucking clue
-            .@"comptime" = false,       // save it when compiled (user will be able to use it) 
-            .@"align" = null,           // natural alignment
-        };
-    }
-    
-    // return an Struct with the data you've specified
-    return @Struct(.auto, null, &names, &types, &attrs);
-}
-
-fn printUsage(comptime args_def: anytype) void {
-
-    std.debug.print("Usage: app", .{});
-    inline for (args_def) |arg| {
-        std.debug.print(" <{s}>", .{arg.field_name});
-    }
-    std.debug.print("\n\nArguments:\n", .{});
-
-    inline for (args_def) |arg| {
-        const type_name = @typeName(arg.type_id);
-        
-        std.debug.print("  {s:<10} ({s}): {s}\n", .{
-            arg.field_name, 
-            type_name, 
-            arg.help
-        });
-    }
-    std.debug.print("\n", .{});
-}
+const GeneratedStruct = @import("arg_structs.zig").GeneratedStruct;
 
 pub fn parseArgs(allocator: Allocator, comptime args_def: anytype) !GeneratedStruct(args_def) {
     const ResultType = GeneratedStruct(args_def);
@@ -88,15 +35,93 @@ pub fn parseArgs(allocator: Allocator, comptime args_def: anytype) !GeneratedStr
 }
 
 fn parseValue(comptime T: type, str: []const u8) !T {
-    if (T == u32) {
-        return std.fmt.parseInt(u32, str, 10);
-    } else if (T == bool) {
-        return std.mem.eql(u8, str, "true");
-    } else if (T == []const u8) {
-        return str; // It's already a string!
+    switch(@typeInfo(T)) {
+        .int => return std.fmt.parseInt(T, str, 10),
+        .float => return std.fmt.parseFloat(T, str),
+        .bool => {
+            if (std.mem.eql(u8, str, "true")) { return true; }
+            else if (std.mem.eql(u8, str, "false")) { return false; }
+            else { return error.InvalidArgument; }
+        },
+        else => {
+            if (T == []const u8) {
+                return str;
+            }
+
+            return error.UnsupportedType;
+        },
     }
 
+    
     return error.UnsupportedType;
 }
 
+
+fn printUsage(comptime args_def: anytype) void {
+
+    std.debug.print("Usage: app", .{});
+    inline for (args_def) |arg| {
+        std.debug.print(" <{s}>", .{arg.field_name});
+    }
+    std.debug.print("\n\nArguments:\n", .{});
+
+    inline for (args_def) |arg| {
+        const type_name = @typeName(arg.type_id);
+        
+        std.debug.print("  {s:<10} ({s}): {s}\n", .{
+            arg.field_name, 
+            type_name, 
+            arg.help
+        });
+    }
+    std.debug.print("\n", .{});
+}
+
+const talloc = std.testing.allocator;
+const expect = std.testing.expect;
+const expectEqualStrings = std.testing.expectEqualStrings;
+
+test "parseValue successful" {
+    const p1 = try parseValue(u32, "16");
+    try expect(@as(u32, 16) == p1);
+
+    const p2 = try parseValue(u64, "219873");
+    try expect(@as(u64, 219873) == p2);
+
+    const p3 = try parseValue(u16, "8");
+    try expect(@as(u16, 8) == p3);
+
+    const p4 = try parseValue(i32, "-1");
+    try expect(@as(i32, -1) == p4);
+
+    const p5 = try parseValue(usize, "4");
+    try expect(@as(usize, 4) == p5);
+    
+    const p6 = try parseValue(f64, "3.14");
+    try expect(@as(f64, 3.14) == p6);
+
+    const p7 = try parseValue(f32, "3");
+    try expect(@as(f32, 3) == p7);
+
+    const p8 = try parseValue(bool, "true");
+    try expect(true == p8);
+
+    const p9 = try parseValue(bool, "false");
+    try expect(false == p9);
+
+    const p10 = try parseValue([]const u8, "quelcom");
+    try expectEqualStrings(p10, "quelcom");
+}
+
+const expectError = std.testing.expectError;
+const ParseFloatError = std.fmt.ParseFloatError;
+const ParseIntError = std.fmt.ParseIntError;
+
+test "parseValue errors" {
+    try expectError(ParseFloatError.InvalidCharacter, parseValue(f64, "a"));
+    try expectError(ParseIntError.Overflow, parseValue(u8, "-1"));
+    try expectError(ParseIntError.InvalidCharacter, parseValue(u8, "a"));
+
+    try expectError(error.InvalidArgument, parseValue(bool, "ture"));
+}
 
