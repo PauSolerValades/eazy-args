@@ -2,21 +2,17 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 
-const arg_struct = @import("arg_structs.zig");
+const reification = @import("reification.zig");
+const validation = @import("validation.zig");
 
-pub const ArgsStruct = arg_struct.ArgsStruct;
-pub const Arg = arg_struct.Arg; // make the struct public for the import of the library
-pub const OptArg = arg_struct.OptArg;
-pub const Flag = arg_struct.Flag;
-
-fn isHelp(s: []const u8) bool {
-    return std.mem.eql(u8, s, "-h") or 
-           std.mem.eql(u8, s, "--help") or 
-           std.mem.eql(u8, s, "help"); // Catches the specific case you asked for!
-}
+// make the structs public to access them from main
+pub const ArgsStruct = reification.ArgsStruct;
+pub const Arg = reification.Arg; 
+pub const OptArg = reification.OptArg;
+pub const Flag = reification.Flag;
 
 pub fn parseArgs(allocator: Allocator, comptime args_def: anytype, stdout: *Io.Writer, stderr: *Io.Writer) !ArgsStruct(args_def) {
-    arg_struct.validateDefinition(args_def);
+    validation.validateDefinition(args_def);
     const ResultType = ArgsStruct(args_def);
     var result: ResultType = undefined;
     

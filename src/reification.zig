@@ -1,11 +1,12 @@
 const std = @import("std");
 const Type = std.builtin.Type;
 
+const validation = @import("validation.zig");
 
 /// Creates the Argument Structure
 /// name uses [:0] to avoid the \0 string
 pub fn Arg(comptime T: type, comptime name: [:0]const u8, comptime description: []const u8) type {
-    validateReserved(name, null);
+    validation.validateReservedKeywords(name, null);
 
     return struct {
         pub const type_id = T;
@@ -19,7 +20,7 @@ pub fn OptArg(comptime T: type, comptime name: [:0]const u8, comptime short: [:0
     if (name[0] == '-') @compileError("Long name '" ++ name ++ "' must not start with '-'.");
     if (short[0] == '-') @compileError("Short name '" ++ short ++ "' must not start with '-'.");    
     
-    validateReserved(name, short);
+    validation.validateReservedKeywords(name, short);
 
     return struct {
         pub const type_id = T;
@@ -35,7 +36,7 @@ pub fn Flag(comptime name: [:0]const u8, comptime short: [:0]const u8, comptime 
     if (name[0] == '-') @compileError("Long name '" ++ name ++ "' must not start with '-'.");
     if (short[0] == '-') @compileError("Short name '" ++ short ++ "' must not start with '-'.");    
     
-    validateReserved(name, short);
+    validation.validateReservedKeywords(name, short);
 
     return struct {
         pub const type_id = bool;
@@ -47,20 +48,6 @@ pub fn Flag(comptime name: [:0]const u8, comptime short: [:0]const u8, comptime 
         pub const is_flag = true;
     };
 
-}
-
-fn validateReserved(comptime name: []const u8, comptime short: ?[]const u8) void {
-    // Check Long Name
-    if (std.mem.eql(u8, name, "help")) {
-        @compileError("Argument name 'help' is reserved by the library. Please pick a different name.");
-    }
-
-    // Check Short Name (if it exists)
-    if (short) |s| {
-        if (std.mem.eql(u8, s, "h")) {
-            @compileError("Short argument 'h' is reserved for help. Please pick a different character.");
-        }
-    }
 }
 
 /// args_tuple is an anonymous struct containing three tuples, exactly
@@ -126,22 +113,4 @@ pub fn ArgsStruct(comptime definition: anytype) type {
     return @Struct(.auto, null, &names, &types, &attrs);
 }
 
-/// as we can't make a specific struct for the definitions, we must validate whatever the user passes
-/// is what its actually expected
-pub fn validateDefinition(comptime defs: anytype) void {
-    const T = @TypeOf(defs);
-    const typeInfo = @typeInfo(T);
-
-    if (typeInfo != .@"struct") {
-        @compileError("Definitions must be a struct like .{ .required = ... }");
-    }
-
-    if (!@hasField(T, "required")) @compileError("Missing field: .required");
-    if (!@hasField(T, "optional"))  @compileError("Missing field: .optional");
-    if (!@hasField(T, "flags"))    @compileError("Missing field: .flags");
-    
-    const required: type = @TypeOf(defs.required);
-    if (!@typeInfo(required).@"struct".is_tuple) 
-        @compileError(".required must be a tuple `.{ ... }`");
-}
 

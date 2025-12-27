@@ -1,6 +1,10 @@
 const std = @import("std");
 const eaz = @import("easy_args_zig");
 
+const Arg = eaz.Arg;
+const OptArg = eaz.OptArg;
+const Flag = eaz.Flag;
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -16,13 +20,13 @@ pub fn main() !void {
     
     const definitions = .{
         .required = .{
-            eaz.Arg(u32, "limit", "Limits are meant to be broken"),
-            eaz.Arg([]const u8, "username", "who are you dear?"),
+            Arg(u32, "limit", "Limits are meant to be broken"),
+            Arg([]const u8, "username", "who are you dear?"),
         },
         .optional = .{
-            eaz.OptArg(u32, "break", "b", 100, "Stop before the limit"),
+            OptArg(u32, "break", "b", 100, "Stop before the limit"),
         },
-        .flags = .{eaz.Flag("verbose", "v", "Print a little, print a lot"),},
+        .flags = .{Flag("verbose", "v", "Print a little, print a lot"),},
     };
 
     const arguments = eaz.parseArgs(allocator, definitions, stdout, stderr) catch |err| {
@@ -33,7 +37,7 @@ pub fn main() !void {
             },
             else => {
                 try stderr.flush();
-                std.process.exit(1);
+                std.process.exit(0);
             }
         }    
     };
