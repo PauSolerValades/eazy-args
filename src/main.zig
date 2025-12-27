@@ -6,21 +6,27 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
     
-    // var buffer: [1024]u8 = undefined;
-    // var stdout_writer = std.fs.File.stdout().writer(&buffer);
-    // const stdout = &stdout_writer.interface;
+    var buffer: [1024]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&buffer);
+    const stdout = &stdout_writer.interface;
 
     var buferr: [1024]u8 = undefined;
     var stderr_writer = std.fs.File.stdout().writer(&buferr);
     const stderr = &stderr_writer.interface;
     
     const definitions = .{
-        eaz.Arg(u32, "limit", "Limits are meant to be broken"),
-        eaz.Arg(bool, "verbose", "print a little, or print a lot"),
-        eaz.Arg([]const u8, "username", "who are you dear?"), // Added a string to prove it works
+        .required = .{
+            eaz.Arg(u32, "limit", "Limits are meant to be broken"),
+            eaz.Arg(bool, "verbose", "print a little, or print a lot"),
+            eaz.Arg([]const u8, "username", "who are you dear?"),
+        },
+        .optional = .{
+            eaz.OptArg(u32, "break", "b", 100, "Stop before the limit"),
+        },
+        .flags = .{eaz.Flag("hello", "he", "Print a little, print a lot but now with a flag"),},
     };
 
-    const config = eaz.parseArgs(allocator, definitions, stderr) catch |err| {
+    const config = eaz.parseArgs(allocator, definitions, stdout, stderr) catch |err| {
         std.debug.print("Failed to parse args: {any}\n", .{err});
         return;
     };
@@ -48,6 +54,5 @@ pub fn main() !void {
     std.debug.print("Limit:    {d}\n", .{config.limit});
     std.debug.print("Verbose:  {any}\n", .{config.verbose});
     std.debug.print("Username: {s}\n", .{config.username});
-
 }
 

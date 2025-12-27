@@ -34,9 +34,10 @@ Luckily, I've managed to ensemble a working prototype real fast! This can be nic
 
 ## TODO:
 
-[ ] Create `OptArg` and `Flag` structs. Remember to check that no flags are repeated
-[ ] Update GeneratorStruct to handle a struct of lists 
-[ ] Default values: where do I store them in comptime? i need to do some research arround that (`default_value_ptr`)
-[ ] New Parser: first fill the Arg normals, and then search for `-s` or `--string` for the flags and the OptArg
+[x] Create `OptArg` and `Flag` structs. Remember to check that no flags are repeated
+[x] Update GeneratorStruct to handle a struct of lists 
+[x] Default values: where do I store them in comptime? i need to do some research arround that (`default_value_ptr`)
+[x] New Parser: first fill the Arg normals, and then search for `-s` or `--string` for the flags and the OptArg
 [x] ValueParser: make it parse all the types appropiately, using std
+[] show help when argument is help 
 [ ] 
