@@ -56,6 +56,18 @@ pub fn Flag(comptime name: [:0]const u8, comptime short: [:0]const u8, comptime 
 /// - .flags: contains Flag structs
 /// This struct has been validated by the another part
 pub fn ArgsStruct(comptime definition: anytype) type {
+    
+    // const len_cmd = definition.comands.len;
+    //
+    // var nested_def: ?type = null;
+    // if (len_cmd != 0) {
+    //     // for element in comands: // hem de tenir un struct per a cada mètode, ja que hem de fer la unió
+    //     //  nested_def = ArgsStruct(element);
+    //     //
+    //     // create union, plug that into the struct
+    //     nested_def = ArgsStruct(definition);
+    // }
+
     const len_req = definition.required.len;
     const len_opt = definition.optional.len;
     const len_flg = definition.flags.len;
@@ -66,20 +78,21 @@ pub fn ArgsStruct(comptime definition: anytype) type {
     var types: [len]type = undefined;
     var attrs: [len]Type.StructField.Attributes = undefined;
     
-    // Fill required args, they are the first ones
+    // fill required args, they are the first ones
     var i: usize = 0;
     inline for (definition.required) |arg| {
         names[i] = arg.field_name;
         types[i] = arg.type_id;
         
         attrs[i] = .{
-            .default_value_ptr = null,  // no fucking clue
+            .default_value_ptr = null,  // no default value 
             .@"comptime" = false,       // save it when compiled (user will be able to use it) 
             .@"align" = null,           // natural alignment
         };
         i += 1;
     }
 
+    // fill optional arguments
     inline for (definition.optional) |arg| {
         names[i] = arg.field_name;
         types[i] = arg.type_id;
@@ -94,6 +107,7 @@ pub fn ArgsStruct(comptime definition: anytype) type {
         i += 1;
     }
     
+    // fill flags
     inline for (definition.flags) |arg| {
         names[i] = arg.field_name;
         types[i] = bool;
@@ -103,14 +117,16 @@ pub fn ArgsStruct(comptime definition: anytype) type {
         const ptr: *const anyopaque = @ptrCast(&false_val);
 
         attrs[i] = .{ 
-            .@"comptime" = false,
-            .@"align" = null, 
-            .default_value_ptr = ptr 
+            .@"comptime" = false,        
+            .@"align" = null,           // nartural alignment
+            .default_value_ptr = ptr    // a pointer to a false
         };
         i += 1;
     }
 
     return @Struct(.auto, null, &names, &types, &attrs);
 }
+
+
 
 
