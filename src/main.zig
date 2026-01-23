@@ -85,24 +85,45 @@ pub fn main(init: std.process.Init) !void {
             .entry = .{ 
                 .required = .{ Arg([]const u8, "description", "What are you doing") },
                 .optional = .{ OptArg(?usize, "project", "p", null, "Which project does the entry belong")},
-                .flags = .{},
-                .commands = .{},
             },
-            .project = .{ 
-                .required = .{ Arg([]const u8, "Name", "Which project is this") },
-                .optional = .{ OptArg(?usize, "subproject", "sp", null, "Child of subprojectid") },
-                .flags = .{},
-                .commands = .{},
+            .project = .{
+                .commands = .{
+                    .create = .{
+                        .required = .{ Arg([]const u8, "Name", "Which project is this") },
+                        .optional = .{ OptArg(?usize, "subproject", "sp", null, "Child of subprojectid") },
+                    }, 
+                    .list = .{},
+                },
+                .flags = .{ Flag("exa,mple", "ex", "Idk") },
             },
         },
-        .required = .{},
-        .optional = .{},
-        .flags = .{},
-    };
+        .flags = .{ Flag("verbose", "v", "Print a little, print a lot") }, 
+    };    
 
-    //const arguments = try eaz.parseArgs(allocator, definition, stdout, stderr);
+    // const def_alternative = .{
+    //     commands = .{
+    //         .entry = .{
+    //             Arg([]const u8, "description", "What are you doing"),
+    //             OptArg(?usize, "project", "p", null, "Which project does the entry belong"),
+    //         },
+    //         .project = .{
+    //             .commands = .{
+    //                 create = .{
+    //                     Arg([]const u8, "Name", "Which project is this"),
+    //                     OptArg(?usize, "subproject", "sp", null, "Child of subprojectid"),
+    //                 },
+    //                 list = .{},
+    //             },
+    //             args = .{ Flag("example", "ex", "idk") },
+    //         },
+    //     },
+    //     args = .{ Flag("verbose", "v", "print") },
+    // };
+    //
+    
+    // const arguments = try eaz.parseArgs(allocator, definition, stdout, stderr);
     var args = try init.minimal.args.iterateAllocator(init.arena.allocator()); // this is to make it multiplatform, for now
-    const arguments = eaz.parseArgs(init.arena.allocator(), definition, &args, stdout, stderr) catch |err| {
+    const arguments = eaz.parseArgs(definition, &args, stdout, stderr) catch |err| {
         switch (err) {
             ParseErrors.HelpShown => try stdout.flush(),
             ParseErrors.UnexpectedArgument => {try stderr.writeAll("Error"); try stderr.flush(); },
@@ -116,4 +137,5 @@ pub fn main(init: std.process.Init) !void {
     try stdout.print("{any}\n", .{arguments});
 
 }
+
 

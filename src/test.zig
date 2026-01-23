@@ -39,10 +39,34 @@ pub fn main() !void {
     
     inline for (typeInfo.@"struct".fields) |f| {
         std.debug.print(" - Name: '{s}', Type: {s}\n", .{f.name, @typeName(f.type)});
-        std.debug.print("{any}\n", .{@typeInfo(f.type).@"union".fields});
+
+        // if (std.mem.eql(u8, @typeName(f.type), "union")) { 
+        //     std.debug.print("{any}\n", .{@typeInfo(f.type).@"union".fields});
+        // }
+        //std.debug.print("{any}\n", .{@typeInfo(f.type).@"union".fields});
 
     }
+    
+    const Precision = enum {
+        single,
+        double,
+    };
+    const NormalUnion = union(Precision) {
+        single: f32,
+        double: f64,
+    };
 
+    const NormalStruct = struct{
+        u: NormalUnion,
+        b: usize,
+    };
+    
+    const un = NormalUnion{.single = 3.2 };
+    const b: usize = 2;
+    const n = NormalStruct{.u = un, .b = b };
+    const UnionTag = std.meta.Tag(@TypeOf(n.u));
+    
+    std.debug.print("{any}\n", .{UnionTag});
     
 }
 
