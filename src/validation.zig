@@ -38,21 +38,23 @@ pub fn validateDefinition(comptime definition: anytype) void {
     comptime var hasOptional = false;
     comptime var hasFlags    = false;
     
-    // the comptime on the if is NEEDED for this to work
-    inline for (typeInfo.@"struct".fields) |field| {
-        if (comptime std.mem.eql(u8, field.name, "required")) {
-            hasRequired = true;
-        } else if (comptime std.mem.eql(u8, field.name, "commands")) {
-            hasCommands = true;
-        } else if (comptime std.mem.eql(u8, field.name, "optional")) {
-            hasOptional = true;
-        } else if (comptime std.mem.eql(u8, field.name, "flags")) {
-            hasFlags = true;
-        } else {
-             @compileError("Field '" ++ field.name ++ "' is invalid. Allowed: required, optional, flags, commands.");
-        }
-    }      
-  
+    // the definition validation must happen on compile time
+    comptime {
+        for (typeInfo.@"struct".fields) |field| {
+            if (std.mem.eql(u8, field.name, "required")) {
+                hasRequired = true;
+            } else if (std.mem.eql(u8, field.name, "commands")) {
+                hasCommands = true;
+            } else if (std.mem.eql(u8, field.name, "optional")) {
+                hasOptional = true;
+            } else if (std.mem.eql(u8, field.name, "flags")) {
+                hasFlags = true;
+            } else {
+                @compileError("Field '" ++ field.name ++ "' is invalid. Allowed: required, optional, flags, commands.");
+            }
+        }      
+    }
+    
     if (hasCommands) {
         if (hasRequired) @compileError(".commands and .required are mutually exclusive in the same level");
         
@@ -66,41 +68,30 @@ pub fn validateDefinition(comptime definition: anytype) void {
         inline for (command_typeinfo.@"struct".fields) |field| {
             validateDefinition(@field(definition.commands, field.name));
         }
-
     } else {
-        
-        const required: type = @TypeOf(definition.required);
-        if (!@typeInfo(required).@"struct".is_tuple) @compileError("required must be a tuple `.{ ... }`");
-        
-        inline for (@typeInfo(required).@"struct".fields) |field| {
-            const potential_arg = @field(definition.required, field.name);
-            if (potential_arg._kind != r.ArgKind.arg) @compileError(".required must contain Arg()");
-        }
-    
-        if (hasOptional) validateOptional(definition);
-        if (hasFlags) validateFlags(definition);
+       
+        validateSubfield(definition, .arg);
+
+        if (hasOptional) validateSubfield(definition, .optarg);
+        if (hasFlags) validateSubfield(definition, .flag);
     }
 }
 
-fn validateOptional(comptime definition: anytype) void {
-    const optional: type = @TypeOf(definition.optional);
-    if (!@typeInfo(optional).@"struct".is_tuple) @compileError("optional must be a tuple `.{ ... }`");
-    
-    inline for (@typeInfo(optional).@"struct".fields) |field| {
+fn validateSubfield(comptime definition: anytype, comptime kind: r.ArgKind) void {
+    const name = switch(kind) {
+        .arg => "required",
+        .optarg => "optional",
+        .flag => "flags",
+    };
 
-        const potential_arg = @field(definition.optional, field.name);
-        if (potential_arg._kind != r.ArgKind.optarg) @compileError(".optional must contain OptArg()");
-    }
-}
+    const subfield: type = @TypeOf(@field(definition, name));
+    if (!@typeInfo(subfield).@"struct".is_tuple) @compileError(name ++ " must be a tuple `.{ ... }`");
 
-fn validateFlags(comptime definition: anytype) void {
-    const flags: type = @TypeOf(definition.flags);
-    if (!@typeInfo(flags).@"struct".is_tuple) @compileError("flags must be a tuple `.{ ... }`");
-    
-    inline for (@typeInfo(flags).@"struct".fields) |field| {
-        const potential_arg = @field(definition.flags, field.name);
-        if (potential_arg._kind != r.ArgKind.flag) @compileError(".flags must contain Flag()");
+    inline for (@typeInfo(subfield).@"struct".fields) |field| {
+        const potential_arg = @field(@field(definition, name), field.name);
+        if (potential_arg._kind != kind) @compileError("." ++ name ++ " must just contain " ++ kind);
     }
+
 }
 
 test "normal definition" {
