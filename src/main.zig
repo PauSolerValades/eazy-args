@@ -126,8 +126,6 @@ pub fn main(init: std.process.Init) !void {
     const arguments = eaz.parseArgs(definition, args, stdout, stderr) catch |err| {
         switch (err) {
             ParseErrors.HelpShown => try stdout.flush(),
-            ParseErrors.UnexpectedArgument => {try stderr.writeAll("Error"); try stderr.flush(); },
-
             else => try stderr.flush(),
         }    
 

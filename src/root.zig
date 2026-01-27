@@ -21,10 +21,10 @@ pub const ParseErrors = error { HelpShown, MissingArgument, MissingValue, Unknow
 /// 3. All the required arguments must one after the other (eg ./prgm cmd1 r1, ..., rn, -f1,...,-fm, -o1, ..., -on). The order of required, flags, opt 
 ///     can be interchangable, and opt/flags can be mixed toghether
 /// 4. No flags nor options can be between commands. If a flag/option is specific of a subcommand, add it before the last command.
-pub fn parseArgs(comptime definition: anytype, args: []const[]const u8, stdout: *Io.Writer, stderr: *Io.Writer) !ArgsStruct(definition){
+pub fn parseArgs(comptime definition: anytype, args: []const[]const u8, stdout: *Io.Writer, stderr: *Io.Writer) anyerror!ArgsStruct(definition){
 
     if (std.mem.eql(u8, args[0], "help")) {
-        try printUsage(args_def, stdout);
+        try printUsage(definition, stdout);
         return error.HelpShown;
     }
     
@@ -37,14 +37,17 @@ pub fn parseArgs(comptime definition: anytype, args: []const[]const u8, stdout: 
     
     // as a standard, we check if a field exists in definition not in result : ReArgs
     // that means @hasField(definition, ...) and NOT @hasField(result, ...)
-    const has_flags = @hasField(definition, "flags");
-    const has_optional = @hasField(definition, "optional");
+    const Definition = @TypeOf(definition);
+    //const typeInfo = @typeInfo(T);
+
+    const has_flags = @hasField(Definition, "flags");
+    const has_optional = @hasField(Definition, "optional");
     // default flags to false
     if (has_flags) {
-        inline for definition.flags |flag| {
+        inline for (definition.flags) |flag| {
             // we have to fill the struct
             // we are sure that definition IS the same as ReArgs struct
-            @field(result, flag.name) = false;
+            @field(result, flag.field_name) = false;
         
         }
     }
@@ -52,19 +55,19 @@ pub fn parseArgs(comptime definition: anytype, args: []const[]const u8, stdout: 
     // default optionals to their values
     if (has_optional) {
         inline for (definition.optional) |opt| {
-            @field(result, opt.name) = o.default_value;
+            @field(result, opt.field_name) = opt.default_value;
         }
     }
    
-    var required_idx: usize = 0;
+    var parsed_required: usize = 0;
     var parsed_flags: usize = 0;
     var parsed_options: usize = 0;
     var i: usize = 0;
 
-    while (args, 0..) : (i += 1) {
+    while (i < args.len) : (i += 1) {
         const current_arg = args[i];
 
-        if (@hasField(definition, "commands")) {
+        if (@hasField(Definition, "commands")) {
             // get the type of the command field
             // serach in the ReArgs because we are looking for the Union to get which commands
             // have been already defined
@@ -108,10 +111,10 @@ pub fn parseArgs(comptime definition: anytype, args: []const[]const u8, stdout: 
         // else its a required: enter in a loop to parse exactly the required arguments.
         // check how many flags/options are there, should add up to definition.flags.len. if they match we are done
         // else raise error
-        if (std.mem.startWith(u8, current_arg, "-")) {
+        if (std.mem.startsWith(u8, current_arg, "-")) {
             var matched = false;
 
-            if (has_flag) {
+            if (has_flags) {
                 inline for (definition.flags) |flag| {
                     const is_short = std.mem.eql(u8, current_arg, "--" ++ flag.field_name);
                     const is_long = std.mem.eql(u8, current_arg, "-" ++ flag.field_short);
@@ -126,7 +129,7 @@ pub fn parseArgs(comptime definition: anytype, args: []const[]const u8, stdout: 
                 }
             }
 
-            if (!matched and @hasField(definition, "optional")) {
+            if (!matched and @hasField(Definition, "optional")) {
                 inline for (definition.optional) |opt| {
                     const is_short = std.mem.eql(u8, current_arg, "--" ++ opt.field_name);
                     const is_long = std.mem.eql(u8, current_arg, "-" ++ opt.field_short);
@@ -139,6 +142,7 @@ pub fn parseArgs(comptime definition: anytype, args: []const[]const u8, stdout: 
 
                         @field(result, opt.field_name) = try parseValue(opt.type_id, args[i+1]);
                         i += 1; // skip the next iteration
+                        parsed_options += 1;
                         matched = true;
                         // nota, aquí un break literalment no fa res.
                         // un inline ens està generant codi, ergo no és un for!
@@ -156,37 +160,38 @@ pub fn parseArgs(comptime definition: anytype, args: []const[]const u8, stdout: 
     
         // at this point this is uneccessary, validateDefinition guarantees that
         // there is not a command and a required in the same level, but nevertheless..
-        if (@hasField(definition, "required")) {
-            if (required_idx >= definition.required.len) {
+        if (@hasField(Definition, "required")) {
+            if (parsed_required >= definition.required.len) {
                 try stderr.print("Error: UnexpectedArgument '{s}'\n", .{current_arg});
                 return error.UnexpectedArgument;
             }
 
             // parse
             inline for (definition.required, 0..) |req, j| {
-                if (j == required_idx) 
-                    @field(result, req.field_name) = try parseValue(req.type, current_arg); 
+                if (j == parsed_required) 
+                    @field(result, req.field_name) = try parseValue(req.type_id, current_arg);
+                    parsed_required += 1;
             }
         } else {
-            try stderr.print("Error: catastrofic failure of the validation function. Cry.");
+            try stderr.writeAll("Error: catastrofic failure of the validation function. Cry.");
             return error.CatastroficStructure;
         }
         
                
         // some safety checks
         //
-        if (has_flags and parsed_flags > definition.flags) {
+        if (has_flags and parsed_flags > definition.flags.len) {
             try stderr.print("Error: Incorrect number of flags detected. Should be at most {d} but are {d}", .{definition.flags.len, parsed_flags});
             return error.InvalidFlags;
         }
         
-        if (has_optional and parsed_options > definition.optional) {
+        if (has_optional and parsed_options > definition.optional.len) {
             try stderr.print("Error: Incorrect number of options detected. Should at most {d} but are {d}", .{definition.optional.len, parsed_options});
             return error.InvalidOptions;
         }
 
-        if (required_idx != definition.required.len) {
-            try stderr.print("Error: Incorrect number of required arguments detected. Should be {d} but are {d}.", .{definition.required.len, required_idx});
+        if (parsed_required != definition.required.len) {
+            try stderr.print("Error: Incorrect number of required arguments detected. Should be {d} but are {d}.", .{definition.required.len, parsed_required});
             return error.UnexpertedArgument;
         }
     }
@@ -307,22 +312,30 @@ fn parseValue(comptime T: type, str: []const u8) !T {
     return error.UnsupportedType;
 }
 
+fn printUsage(comptime definition: anytype, writer: *Io.Writer) !void {
+    _ = definition;
+    try writer.writeAll("This is the usage that I will definetly do xd\n");
+    return;
+}
 
-fn printUsage(comptime args_def: anytype, writer: *Io.Writer) !void {
-    try writer.print("Usage: app", .{});
+fn OldPrintUsage(comptime definition: anytype, writer: *Io.Writer) !void {
+    try writer.writeAll("Usage: app");
 
-    if (args_def.optional.len > 0 or args_def.flags.len > 0) {
-        try writer.print(" [options]", .{});
+    if (@hasField(definition, "optional") and definition.optional.len > 0) {
+        try writer.writeAll(" [options]");
+    }
+    if (@hasField(definition, "flags") and definition.flags.len > 0) {
+        try writer.writeAll(" [options]");
     }
 
-    inline for (args_def.required) |arg| {
+    inline for (definition.required) |arg| {
         try writer.print(" <{s}>", .{arg.field_name});
     }
     try writer.print("\n\n", .{});
 
-    if (args_def.required.len > 0) {
+    if (definition.required.len > 0) {
         try writer.print("Positional Arguments:\n", .{});
-        inline for (args_def.required) |arg| {
+        inline for (definition.required) |arg| {
             try writer.print("  {s:<12} ({s}): {s}\n", .{
                 arg.field_name,
                 @typeName(arg.type_id),
@@ -332,11 +345,11 @@ fn printUsage(comptime args_def: anytype, writer: *Io.Writer) !void {
         try writer.print("\n", .{});
     }
 
-    if (args_def.optional.len > 0 or args_def.flags.len > 0) {
+    if (definition.optional.len > 0 or definition.flags.len > 0) {
         try writer.print("Options:\n", .{});
 
         // Print Options (Key + Value)
-        inline for (args_def.optional) |arg| {
+        inline for (definition.optional) |arg| {
             // Format: -p, --port <u32>
             try writer.print("  -{s}, --{s:<12} <{s}>: {s} (default: {any})\n", .{
                 arg.field_short,
@@ -347,7 +360,7 @@ fn printUsage(comptime args_def: anytype, writer: *Io.Writer) !void {
             });
         }
 
-        inline for (args_def.flags) |arg| {
+        inline for (definition.flags) |arg| {
             try writer.print("  -{s}, --{s:<12}       : {s}\n", .{
                 arg.field_short,
                 arg.field_name,
