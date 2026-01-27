@@ -1,7 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
-const Args = std.process.Args;
 
 const reification = @import("reification.zig");
 const validation = @import("validation.zig");
@@ -100,9 +99,7 @@ pub fn parseArgs(comptime definition: anytype, args: []const[]const u8, stdout: 
                         return result;
                     }
                 }
-            } else {
-                return error.InvalidCommand;
-            }
+            } 
         }
         
         // PSEUDOCODE:
@@ -113,13 +110,30 @@ pub fn parseArgs(comptime definition: anytype, args: []const[]const u8, stdout: 
         // else raise error
         if (std.mem.startsWith(u8, current_arg, "-")) {
             var matched = false;
+           
+            // if some of the arguments is help just return
+            if (std.mem.eql(u8, current_arg, "-h") or std.mem.eql(u8, current_arg, "--help")) {
+                try printUsage(definition, stdout);
+                return error.HelpShown;
+            }
+           
+            const eq_index = std.mem.indexOf(u8, current_arg, "=");
+            
+            const arg_key = if (eq_index) |idx| current_arg[0..idx] else current_arg;
+            const arg_val_inline = if (eq_index) |idx| current_arg[idx+1..] else null;
 
             if (has_flags) {
                 inline for (definition.flags) |flag| {
-                    const is_short = std.mem.eql(u8, current_arg, "--" ++ flag.field_name);
-                    const is_long = std.mem.eql(u8, current_arg, "-" ++ flag.field_short);
+                    const is_short = std.mem.eql(u8, arg_key, "--" ++ flag.field_name);
+                    const is_long = std.mem.eql(u8, arg_key, "-" ++ flag.field_short);
 
                     if(is_short or is_long) {
+
+                        if (arg_val_inline != null) {
+                            try stderr.print("Error: a flag ({s}) cannot take values.\n", .{arg_key});
+                            return error.UnexpectedValue;
+                        }
+
                         @field(result, flag.field_name) = true;
                         parsed_flags += 1;
                         matched = true;
@@ -131,21 +145,29 @@ pub fn parseArgs(comptime definition: anytype, args: []const[]const u8, stdout: 
 
             if (!matched and @hasField(Definition, "optional")) {
                 inline for (definition.optional) |opt| {
-                    const is_short = std.mem.eql(u8, current_arg, "--" ++ opt.field_name);
-                    const is_long = std.mem.eql(u8, current_arg, "-" ++ opt.field_short);
+                    const is_short = std.mem.eql(u8, arg_key, "--" ++ opt.field_name);
+                    const is_long = std.mem.eql(u8, arg_key, "-" ++ opt.field_short);
 
                     if(is_short or is_long) {
-                        if (i+1 >= args.len) {
-                            try stderr.print("Error: Option '{s}' does not have a value\n", .{opt.field_name});
-                            return error.MissingValue;
-                        }
+                        // is an --opt=val 
+                        if (arg_val_inline) |val| {
+                            @field(result, opt.field_name) = try parseValue(opt.type_id, val);
+                        } else { // is an --opt val
+                           
+                            if (i+1 >= args.len) {
+                                try stderr.print("Error: Option '{s}' does not have a value\n", .{opt.field_name});
+                                return error.MissingValue;
+                            }
+                       
+                            @field(result, opt.field_name) = try parseValue(opt.type_id, args[i+1]);
+                            i += 1; 
+                            parsed_options += 1;
+                            // nota, aquí un break literalment no fa res.
+                            // un inline ens està generant codi, ergo no és un for!
 
-                        @field(result, opt.field_name) = try parseValue(opt.type_id, args[i+1]);
-                        i += 1; // skip the next iteration
-                        parsed_options += 1;
+                        }
+                        
                         matched = true;
-                        // nota, aquí un break literalment no fa res.
-                        // un inline ens està generant codi, ergo no és un for!
                     }
                 }
             }
@@ -179,7 +201,6 @@ pub fn parseArgs(comptime definition: anytype, args: []const[]const u8, stdout: 
         
                
         // some safety checks
-        //
         if (has_flags and parsed_flags > definition.flags.len) {
             try stderr.print("Error: Incorrect number of flags detected. Should be at most {d} but are {d}", .{definition.flags.len, parsed_flags});
             return error.InvalidFlags;
@@ -197,96 +218,6 @@ pub fn parseArgs(comptime definition: anytype, args: []const[]const u8, stdout: 
     }
     
     // mock return until now
-    return result;
-}
-
-// ULL aquí he posat anyerror mentre no reescric la funció per anar amb commands i que hi puguin haver-hi llistes buides :)
-pub fn old_parseArgs(allocator: Allocator, comptime args_def: anytype, args_iter: *Args.Iterator, stdout: *Io.Writer, stderr: *Io.Writer) anyerror!ArgsStruct(args_def) {
-    _ = allocator;
-    validation.validateDefinition(args_def);
-    
-    const ResultType = ArgsStruct(args_def);
-    var result: ResultType = undefined;
-    
-    // options must be initialized to default value
-    inline for (args_def.optional) |opt| {
-        @field(result, opt.field_name) = opt.default_value;
-    }
-
-    // all flags to false by default 
-    inline for (args_def.flags) |flg| {
-        @field(result, flg.field_name) = false;
-    }
-    
-    inline for (args_def.required, 0..) |req_def, i| {
-       
-        const arg_str = args_iter.next() orelse {
-            try stderr.print("Error: Missing argument '{s}'\n", .{req_def.field_name});
-            try printUsage(args_def, stderr);
-            return error.MissingArgument;
-        };
-        
-        // if first argument is help 
-        if (i == 0) {
-            if (std.mem.eql(u8, arg_str, "help")) {
-                try printUsage(args_def, stdout);
-                return error.HelpShown;
-            }
-        }
-
-        // if --help or -h appears
-        if (std.mem.eql(u8, arg_str, "-h") or std.mem.eql(u8, arg_str, "--help")) {
-            try printUsage(args_def, stdout);
-            return error.HelpShown;
-        }
-
-        @field(result, req_def.field_name) = try parseValue(req_def.type_id, arg_str);
-    }
-
-
-    while (args_iter.next()) |arg_str| {
-        // must NOT start with '-'
-        if (arg_str.len < 2 or arg_str[0] != '-') {
-            try stderr.print("Error: Unexpected argument '{s}'\n", .{arg_str});
-            return error.UnexpectedArgument;
-        }
-
-        // check against all known options (Expects value)
-        var matched = false;
-        inline for (args_def.optional) |opt| {
-            // Check long name (--) and short name (-)
-            const is_long  = std.mem.eql(u8, arg_str[2..], opt.field_name);
-            const is_short = std.mem.eql(u8, arg_str[1..], opt.field_short);
-
-            if (is_long or is_short) {
-                // Grab the value for this option
-                const val_str = args_iter.next() orelse {
-                    try stderr.print("Error: Option '{s}' requires a value\n", .{opt.field_name});
-                    return error.MissingValue;
-                };
-                @field(result, opt.field_name) = try parseValue(opt.type_id, val_str);
-                matched = true;
-            }
-        }
-
-        // all known FLAGS (No value, just true)
-        inline for (args_def.flags) |flg| {
-            const is_long  = std.mem.eql(u8, arg_str[2..], flg.field_name);
-            const is_short = std.mem.eql(u8, arg_str[1..], flg.field_short);
-
-            if (is_long or is_short) {
-                @field(result, flg.field_name) = true;
-                matched = true;
-            }
-        }
-
-        if (!matched) {
-            try stderr.print("Error: Unknown argument '{s}'\n", .{arg_str});
-            try printUsage(args_def, stderr);
-            return error.UnknownArgument;
-        }
-    }
-
     return result;
 }
 
@@ -479,6 +410,7 @@ test "Two subcommands with shared definition" {
     }
 }
 
+// "-g commit --amend 'fix bug'"
 test "Subcommands with options/flags at multiple levels" {
     const def = .{
         .commands = .{
@@ -491,25 +423,20 @@ test "Subcommands with options/flags at multiple levels" {
         .optional = .{ OptArg([]const u8, "user", "u", "admin", "User name") },
     };
 
-    // Input: "-g commit --amend 'fix bug'"
-    // This tests the parser's ability to handle parent flags (-g) mixed with subcommands
     const args = &[_][]const u8{ "-g", "commit", "--amend", "fix bug" };
     
     const result = try parseArgs(def, args, nullout, nullout);
 
-    // 1. Check Base level
-    try testing.expectEqual(true, result.@"git-dir"); // -g
-    try testing.expectEqualStrings("admin", result.user); // default
+    try testing.expectEqual(true, result.@"git-dir");
+    try testing.expectEqualStrings("admin", result.user);
 
-    // 2. Check Command selection
     try testing.expect(result.cmd == .commit);
 
-    // 3. Check Subcommand level
     try testing.expectEqual(true, result.cmd.commit.amend);
     try testing.expectEqualStrings("fix bug", result.cmd.commit.msg);
 }
 
-test "4. Two nested subcommands" {
+test "Two nested subcommands" {
     const def = .{
         .commands = .{
             .cloud = .{
@@ -527,12 +454,9 @@ test "4. Two nested subcommands" {
         }
     };
 
-    // Input: "cloud server create --dry-run my-web-app"
     const args = &[_][]const u8{ "cloud", "server", "create", "--dry-run", "my-web-app" };
     
     const result = try parseArgs(def, args, nullout, nullout);
-    // Accessing deeply nested unions requires checking the active tag at each level
-    // In a real app you might use `switch` or `if`, here we assert the path:
     try testing.expect(result.cmd == .cloud);
     try testing.expect(result.cmd.cloud.cmd == .server);
     try testing.expect(result.cmd.cloud.cmd.server.cmd == .create);
@@ -542,21 +466,47 @@ test "4. Two nested subcommands" {
     try testing.expectEqualStrings("my-web-app", final_cmd.name);
 }
 
-test "5. Help shown" {
+test "Help shown" {
     const def = .{
         .required = .{ Arg(u32, "num", "A number") },
     };
         
-    // Case A: "-h"
+    // "-h"
     {
         const args = &[_][]const u8{ "-h" };
         // We expect parseArgs to return the error `HelpShown`
         try testing.expectError(error.HelpShown, parseArgs(def, args, nullout, nullout));
     }
+    // "--help"
+    {
+        const args = &[_][]const u8{ "--help" };
+        // We expect parseArgs to return the error `HelpShown`
+        try testing.expectError(error.HelpShown, parseArgs(def, args, nullout, nullout));
+    }
 
-    // Case B: "help" (as a command/argument)
+    //"help" (as a command/argument)
     {
         const args = &[_][]const u8{ "help" };
         try testing.expectError(error.HelpShown, parseArgs(def, args, nullout, nullout));
     }
+}
+
+// "123 --mode=fast --count 5 -v"
+test "Mixed assignment styles (= vs space)" {
+    const def = .{
+        .required = .{ Arg(u32, "id", "Resource ID") },
+        .optional = .{
+            OptArg([]const u8, "mode", "m", "default", "Operation mode"),
+            OptArg(u32, "count", "c", 1, "Item count"),
+        },
+        .flags = .{ Flag("verbose", "v", "Enable verbose") },
+    };
+
+    const args = &[_][]const u8{ "123", "--mode=fast", "--count", "5", "-v" };
+    const result = try parseArgs(def, args, nullout, nullout);
+
+    try testing.expectEqual(@as(u32, 123), result.id);
+    try testing.expectEqualStrings("fast", result.mode);
+    try testing.expectEqual(@as(u32, 5), result.count);
+    try testing.expectEqual(true, result.verbose);
 }
