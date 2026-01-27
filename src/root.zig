@@ -4,14 +4,30 @@ const Io = std.Io;
 
 const reification = @import("reification.zig");
 const validation = @import("validation.zig");
+const structs = @import("structs.zig");
 
 // make the structs public to access them from main
 pub const ArgsStruct = reification.ArgsStruct;
-pub const Arg = reification.Arg; 
-pub const OptArg = reification.OptArg;
-pub const Flag = reification.Flag;
+pub const Arg = structs.Arg; 
+pub const Opt = structs.Opt;
+pub const Flag = structs.Flag;
 
 pub const ParseErrors = error { HelpShown, MissingArgument, MissingValue, UnknownArgument, UnexpectedArgument };
+
+/// PUBLIC ENTRY POINT
+/// This is what the user calls with the raw OS arguments.
+/// It automatically skips argv[0] (the program name).
+pub fn parseArgs(comptime definition: anytype, args: []const []const u8, stdout: *Io.Writer, stderr: *Io.Writer) !ArgsStruct(definition) {
+    
+    // if the user passes just the program name
+    if (args.len == 1) {
+        try printUsage(definition, stdout);
+        return error.HelpShown;
+    }
+
+    // call the recursive version to adapt it
+    return parseArgsRecursive(definition, args[1..], stdout, stderr);
+}
 
 /// The function parses 
 /// Rules on the parsing:
@@ -20,8 +36,8 @@ pub const ParseErrors = error { HelpShown, MissingArgument, MissingValue, Unknow
 /// 3. All the required arguments must one after the other (eg ./prgm cmd1 r1, ..., rn, -f1,...,-fm, -o1, ..., -on). The order of required, flags, opt 
 ///     can be interchangable, and opt/flags can be mixed toghether
 /// 4. No flags nor options can be between commands. If a flag/option is specific of a subcommand, add it before the last command.
-pub fn parseArgs(comptime definition: anytype, args: []const[]const u8, stdout: *Io.Writer, stderr: *Io.Writer) anyerror!ArgsStruct(definition){
-
+fn parseArgsRecursive(comptime definition: anytype, args: []const[]const u8, stdout: *Io.Writer, stderr: *Io.Writer) anyerror!ArgsStruct(definition){
+    
     if (std.mem.eql(u8, args[0], "help")) {
         try printUsage(definition, stdout);
         return error.HelpShown;
@@ -93,7 +109,7 @@ pub fn parseArgs(comptime definition: anytype, args: []const[]const u8, stdout: 
                         const name: []const u8 = @tagName(tag); // converts the enum into a string
                         const def_subcmd = @field(definition.commands, name);
                         // we know this is a valid command, so we recursively parse the Args 
-                        const parsedCmd = try parseArgs(def_subcmd, args[(i+1)..], stdout, stderr);
+                        const parsedCmd = try parseArgsRecursive(def_subcmd, args[(i+1)..], stdout, stderr);
                         result.cmd = @unionInit(CommandUnion, name, parsedCmd);              
 
                         return result;
@@ -217,11 +233,10 @@ pub fn parseArgs(comptime definition: anytype, args: []const[]const u8, stdout: 
         }
     }
     
-    // mock return until now
     return result;
 }
 
-/// parses the values form the command line
+/// parses the values from the command line
 fn parseValue(comptime T: type, str: []const u8) !T {
     switch(@typeInfo(T)) {
         .int => return std.fmt.parseInt(T, str, 10),
@@ -361,10 +376,10 @@ test "Normal parsing: required, flags, optional" {
     const def = .{
         .required = .{ Arg(u32, "count", "The number of items") },
         .flags = .{ Flag("verbose", "v", "Enable verbose output") },
-        .optional = .{ OptArg([]const u8, "mode", "m", "default", "Operation mode") },
+        .optional = .{ Opt([]const u8, "mode", "m", "default", "Operation mode") },
     };
 
-    const args = &[_][]const u8{ "42", "-v", "--mode", "fast" };
+    const args = &[_][]const u8{ "pgm", "42", "-v", "--mode", "fast" };
     const result = try parseArgs(def, args, nullout, nullout);
 
     try testing.expectEqual(@as(u32, 42), result.count);
@@ -376,7 +391,7 @@ test "Two subcommands with shared definition" {
     const subdef = .{
         .required = .{ Arg(u32, "id", "Resource ID") },
         .flags = .{ Flag("force", "f", "Force operation") },
-        .optional = .{ OptArg(u32, "retry", "r", 1, "Number of retries") },
+        .optional = .{ Opt(u32, "retry", "r", 1, "Number of retries") },
     };
 
     const def = .{
@@ -388,7 +403,7 @@ test "Two subcommands with shared definition" {
 
     // "delete 100 --force"
     {
-        const args = &[_][]const u8{ "delete", "100", "--force" };
+        const args = &[_][]const u8{ "pgm","delete", "100", "--force" };
         const result = try parseArgs(def, args, nullout, nullout);
 
         try testing.expect(result.cmd == .delete); 
@@ -398,9 +413,9 @@ test "Two subcommands with shared definition" {
         try testing.expectEqual(@as(u32, 1), result.cmd.delete.retry); // Default value
     }
 
-    // Test Case B: "update 50 -r 5"
+    // "update 50 -r 5"
     {
-        const args = &[_][]const u8{ "update", "50", "-r", "5" };
+        const args = &[_][]const u8{ "pgm","update", "50", "-r", "5" };
         const result = try parseArgs(def, args, nullout, nullout);
 
         try testing.expect(result.cmd == .update);
@@ -420,10 +435,10 @@ test "Subcommands with options/flags at multiple levels" {
             },
         },
         .flags = .{ Flag("git-dir", "g", "Use custom git dir") },
-        .optional = .{ OptArg([]const u8, "user", "u", "admin", "User name") },
+        .optional = .{ Opt([]const u8, "user", "u", "admin", "User name") },
     };
 
-    const args = &[_][]const u8{ "-g", "commit", "--amend", "fix bug" };
+    const args = &[_][]const u8{ "pgm","-g", "commit", "--amend", "fix bug" };
     
     const result = try parseArgs(def, args, nullout, nullout);
 
@@ -454,7 +469,7 @@ test "Two nested subcommands" {
         }
     };
 
-    const args = &[_][]const u8{ "cloud", "server", "create", "--dry-run", "my-web-app" };
+    const args = &[_][]const u8{ "pgm","cloud", "server", "create", "--dry-run", "my-web-app" };
     
     const result = try parseArgs(def, args, nullout, nullout);
     try testing.expect(result.cmd == .cloud);
@@ -473,20 +488,25 @@ test "Help shown" {
         
     // "-h"
     {
-        const args = &[_][]const u8{ "-h" };
+        const args = &[_][]const u8{ "pgm","-h" };
         // We expect parseArgs to return the error `HelpShown`
         try testing.expectError(error.HelpShown, parseArgs(def, args, nullout, nullout));
     }
     // "--help"
     {
-        const args = &[_][]const u8{ "--help" };
+        const args = &[_][]const u8{ "pgm","--help" };
         // We expect parseArgs to return the error `HelpShown`
         try testing.expectError(error.HelpShown, parseArgs(def, args, nullout, nullout));
     }
 
     //"help" (as a command/argument)
     {
-        const args = &[_][]const u8{ "help" };
+        const args = &[_][]const u8{ "pgm","help" };
+        try testing.expectError(error.HelpShown, parseArgs(def, args, nullout, nullout));
+    }
+    // empty args
+    {
+        const args = &[_][]const u8{"pgm"};
         try testing.expectError(error.HelpShown, parseArgs(def, args, nullout, nullout));
     }
 }
@@ -496,13 +516,13 @@ test "Mixed assignment styles (= vs space)" {
     const def = .{
         .required = .{ Arg(u32, "id", "Resource ID") },
         .optional = .{
-            OptArg([]const u8, "mode", "m", "default", "Operation mode"),
-            OptArg(u32, "count", "c", 1, "Item count"),
+            Opt([]const u8, "mode", "m", "default", "Operation mode"),
+            Opt(u32, "count", "c", 1, "Item count"),
         },
         .flags = .{ Flag("verbose", "v", "Enable verbose") },
     };
 
-    const args = &[_][]const u8{ "123", "--mode=fast", "--count", "5", "-v" };
+    const args = &[_][]const u8{ "pgm", "123", "--mode=fast", "--count", "5", "-v" };
     const result = try parseArgs(def, args, nullout, nullout);
 
     try testing.expectEqual(@as(u32, 123), result.id);

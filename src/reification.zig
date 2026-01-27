@@ -3,61 +3,12 @@ const Type = std.builtin.Type;
 
 const validation = @import("validation.zig");
 
-pub const ArgKind = enum { arg, optarg, flag };
-/// Creates the Argument Structure
-/// name uses [:0] to avoid the \0 string
-pub fn Arg(comptime T: type, comptime name: [:0]const u8, comptime description: []const u8) type {
-    validation.validateReservedKeywords(name, null);
-
-    return struct {
-        pub const type_id = T;
-        pub const field_name = name;
-        pub const help = description;
-        pub const _kind: ArgKind = .arg;
-    };
-}
-
-pub fn OptArg(comptime T: type, comptime name: [:0]const u8, comptime short: [:0]const u8, default: T, comptime description: []const u8) type {
-    // validate both name and short do NOT start with -- and - respectively
-    if (name[0] == '-') @compileError("Long name '" ++ name ++ "' must not start with '-'.");
-    if (short[0] == '-') @compileError("Short name '" ++ short ++ "' must not start with '-'.");    
-    
-    validation.validateReservedKeywords(name, short);
-
-    return struct {
-        pub const type_id = T;
-        pub const field_name = name;
-        pub const field_short = short;
-        pub const default_value = default;
-        pub const help = description;
-        pub const _kind: ArgKind = .optarg;
-    };
-}
-
-pub fn Flag(comptime name: [:0]const u8, comptime short: [:0]const u8, comptime description: []const u8) type {
-    // validate both name and short do NOT start with -- and - respectively
-    if (name[0] == '-') @compileError("Long name '" ++ name ++ "' must not start with '-'.");
-    if (short[0] == '-') @compileError("Short name '" ++ short ++ "' must not start with '-'.");    
-    
-    validation.validateReservedKeywords(name, short);
-
-    return struct {
-        pub const type_id = bool;
-        pub const field_name = name;
-        pub const field_short = short;
-        pub const default_value = false;
-        pub const help = description;
-        pub const is_flag = true;
-        pub const _kind: ArgKind = .flag;
-    };
-
-}
-
-/// args_tuple is an anonymous struct containing three tuples, exactly
-/// - .required: contains Arg structs
-/// - .optional: contains OptArg structs
-/// - .flags: contains Flag structs
-/// This struct has been validated by the another part
+/// Creates a struct (reification) according to the definition description. 
+/// definition is an tuple containing tuples with the following four possible names 
+/// - .required: contains Arg structs. Will be created as a struct field with type T.
+/// - .optional: contains OptArg structs. Will be created as a struct field with type ?T. 
+/// - .flags: contains Flag structs. Will be created as a struct field with type bool (false by default)
+/// - .commands: contains tuples named as the command option, which contain a ".required", ".optional", ".flags". Will be created as a union called "cmd", which will have all the labels as option
 pub fn ArgsStruct(comptime definition: anytype) type {
     
     const definition_type = @TypeOf(definition);
@@ -129,9 +80,9 @@ pub fn ArgsStruct(comptime definition: anytype) type {
         }
     }
     
-    
+    // parse commands 
     if (len_cmd > 0) {
-        const CommandUnion = GenerateCommandUnion(definition.commands);
+        const CommandUnion = GenerateCommandUnion(definition.commands); // here the recursion is propagated.
         
         names[i] = "cmd"; 
         types[i] = CommandUnion;
@@ -147,7 +98,8 @@ pub fn ArgsStruct(comptime definition: anytype) type {
     return @Struct(.auto, null, &names, &types, &attrs);
 }
 
-
+/// Auxiliar function to ArgsStruct which, given a definition.commands, creates a TaggedUnion
+/// with an Enum being all the commands listed in the tuple.
 fn GenerateCommandUnion(comptime commands_def: anytype) type {
     const Cmd: type = @TypeOf(commands_def);
     const fields_info = @typeInfo(Cmd).@"struct".fields;
@@ -163,7 +115,7 @@ fn GenerateCommandUnion(comptime commands_def: anytype) type {
         names[i] = field.name;
 
         const cmd_def = @field(commands_def, field.name);
-        const CmdStruct = ArgsStruct(cmd_def); 
+        const CmdStruct = ArgsStruct(cmd_def); // recursive call to ArgsStruct
 
         types[i] = CmdStruct;
 

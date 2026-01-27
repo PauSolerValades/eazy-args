@@ -1,5 +1,5 @@
 const std = @import("std");
-const r = @import("reification.zig");
+const ArgKind = @import("structs.zig").ArgKind;
 
 pub fn validateReservedKeywords(comptime name: []const u8, comptime short: ?[]const u8) void {
     // check long name
@@ -28,11 +28,6 @@ pub fn validateDefinition(comptime definition: anytype) void {
         @compileError("Definitions must be a struct");
     }
     
-    // const hasRequired = @hasField(T, "required");
-    // const hasCommands = @hasField(T, "commands");
-    // const hasOptional = @hasField(T, "optional");
-    // const hasFlags    = @hasField(T, "flags"); 
-
     comptime var hasRequired = false;
     comptime var hasCommands = false;
     comptime var hasOptional = false;
@@ -76,7 +71,7 @@ pub fn validateDefinition(comptime definition: anytype) void {
     }
 }
 
-fn validateSubfield(comptime definition: anytype, comptime kind: r.ArgKind) void {
+fn validateSubfield(comptime definition: anytype, comptime kind: ArgKind) void {
     const name = switch(kind) {
         .arg => "required",
         .optarg => "optional",
@@ -94,9 +89,10 @@ fn validateSubfield(comptime definition: anytype, comptime kind: r.ArgKind) void
 }
 
 test "normal definition" {
-    const Arg = r.Arg;
-    const Opt = r.OptArg;
-    const Flag = r.Flag;
+    const structs = @import("structs.zig");
+    const Arg = structs.Arg;
+    const Opt = structs.Opt;
+    const Flag = structs.Flag;
     {
         const definition = .{
             .required = .{ Arg(u32, "a", "aaa") },
