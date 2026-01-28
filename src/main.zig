@@ -9,34 +9,6 @@ const Opt = argz.Opt;
 const Flag = argz.Flag;
 const ParseErrors = argz.ParseErrors;
 
-fn inspectType(comptime T: type, label: []const u8, stdout: *Io.Writer) !void {
-    
-    try stdout.print("\nMEMORY LAYOUT: {s}\n", .{label});
-    try stdout.print("Type Name : {s}\n", .{@typeName(T)});
-    try stdout.print("Total Size: {d} bytes\n", .{@sizeOf(T)});
-    try stdout.print("Alignment : {d} bytes\n", .{@alignOf(T)});
-    
-    try stdout.print("Fields:\n", .{});
-    const info = @typeInfo(T);
-    
-    switch (info) {
-        .@"struct" => |s| {
-            inline for (s.fields) |f| {
-                try stdout.print("  - {s:<15} | Type: {s:<15} | Offset: {d}\n", 
-                    .{ f.name, @typeName(f.type), @offsetOf(T, f.name) });
-            }
-        },
-        .@"union" => |u| {
-            try stdout.print("  (Union Active Tag uses {d} bytes)\n", .{@sizeOf(u.tag_type.?)});
-            inline for (u.fields) |f| {
-                try stdout.print("  - {s:<15} | Type: {s:<15} | (Shared Memory)\n", 
-                    .{ f.name, @typeName(f.type) });
-            }
-        },
-        else => try stdout.print("  (Not a struct or union)\n", .{}),
-    }
-}
-
 pub fn main(init: std.process.Init) !void {
    
     var buffer: [1024]u8 = undefined;
@@ -137,5 +109,34 @@ pub fn main(init: std.process.Init) !void {
     }
     try stdout.flush();
 }
+
+fn inspectType(comptime T: type, label: []const u8, stdout: *Io.Writer) !void {
+    
+    try stdout.print("\nMEMORY LAYOUT: {s}\n", .{label});
+    try stdout.print("Type Name : {s}\n", .{@typeName(T)});
+    try stdout.print("Total Size: {d} bytes\n", .{@sizeOf(T)});
+    try stdout.print("Alignment : {d} bytes\n", .{@alignOf(T)});
+    
+    try stdout.print("Fields:\n", .{});
+    const info = @typeInfo(T);
+    
+    switch (info) {
+        .@"struct" => |s| {
+            inline for (s.fields) |f| {
+                try stdout.print("  - {s:<15} | Type: {s:<15} | Offset: {d}\n", 
+                    .{ f.name, @typeName(f.type), @offsetOf(T, f.name) });
+            }
+        },
+        .@"union" => |u| {
+            try stdout.print("  (Union Active Tag uses {d} bytes)\n", .{@sizeOf(u.tag_type.?)});
+            inline for (u.fields) |f| {
+                try stdout.print("  - {s:<15} | Type: {s:<15} | (Shared Memory)\n", 
+                    .{ f.name, @typeName(f.type) });
+            }
+        },
+        else => try stdout.print("  (Not a struct or union)\n", .{}),
+    }
+}
+
 
 

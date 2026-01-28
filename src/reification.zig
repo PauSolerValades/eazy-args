@@ -9,7 +9,7 @@ const validation = @import("validation.zig");
 /// - .optional: contains OptArg structs. Will be created as a struct field with type ?T. 
 /// - .flags: contains Flag structs. Will be created as a struct field with type bool (false by default)
 /// - .commands: contains tuples named as the command option, which contain a ".required", ".optional", ".flags". Will be created as a union called "cmd", which will have all the labels as option
-pub fn ArgsStruct(comptime definition: anytype) type {
+pub fn Reify(comptime definition: anytype) type {
     
     const definition_type = @TypeOf(definition);
     const len_req = if (@hasField(definition_type, "required")) definition.required.len else 0;
@@ -115,7 +115,7 @@ fn GenerateCommandUnion(comptime commands_def: anytype) type {
         names[i] = field.name;
 
         const cmd_def = @field(commands_def, field.name);
-        const CmdStruct = ArgsStruct(cmd_def); // recursive call to ArgsStruct
+        const CmdStruct = Reify(cmd_def); // recursive call to ArgsStruct
 
         types[i] = CmdStruct;
 
