@@ -25,6 +25,7 @@ pub fn build(b: *std.Build) void {
     
     const examples = [_][]const u8{
         "bus_simulation",
+        "simple_example"
     };
 
     // compile the examples

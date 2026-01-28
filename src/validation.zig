@@ -90,8 +90,8 @@ fn validateSubfield(comptime definition: anytype, comptime kind: ArgKind) void {
 
 test "normal definition" {
     const structs = @import("structs.zig");
-    const Arg = structs.Arg;
-    const Opt = structs.Opt;
+    const Arg = structs.Argument;
+    const Opt = structs.Option;
     const Flag = structs.Flag;
     {
         const definition = .{

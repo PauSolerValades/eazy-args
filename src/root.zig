@@ -67,6 +67,7 @@ pub fn parseArgsPosix(comptime definition: anytype, args: *Args.Iterator, stdout
 
 
 const testing = std.testing;
+const ta = testing.allocator; 
 const tio = testing.io;
 var w = std.Io.File.stdout().writer(tio, &.{});
 const nullout = &w.interface;
@@ -83,11 +84,110 @@ test "Normal parsing: required, flags, options" {
     };
 
     const args = &[_][]const u8{ "pgm", "42", "-v", "--mode", "fast" };
-    const result = try parseArgs(def, args, nullout, nullout);
+    const result = try parseArgs(ta, def, args, nullout, nullout);
 
     try testing.expectEqual(@as(u32, 42), result.count);
     try testing.expectEqual(true, result.verbose);
     try testing.expectEqualStrings("fast", result.mode);
+}
+
+test "Normal parsing: 2 args, 2 flags, 2 options" {
+    const def = .{
+        .required = .{
+            Arg(u32, "count", "Number of items to process"),
+            Arg(f64, "scale", "Scaling factor to apply"),
+        },
+        .flags = .{
+            Flag("verbose", "v", "Enable verbose output"),
+            Flag("dryrun", "d", "Run without making changes"),
+        },
+        .options = .{
+            Opt([]const u8, "mode", "m", "standard", "Operation mode"),
+            Opt(i32, "threshold", "t", 10, "Numeric threshold"),
+        },
+    };
+    
+    // "pgm 42 1.5 -v -d --mode fast --threshold 25"
+    {
+        const args = &[_][]const u8{
+            "pgm",
+            "42",
+            "1.5",
+            "-v",
+            "-d",
+            "--mode", "fast",
+            "--threshold", "25",
+        };
+
+        const result = try parseArgs(ta, def, args, nullout, nullout);
+
+        try testing.expectEqual(@as(u32, 42), result.count);
+        try testing.expectEqual(@as(f64, 1.5), result.scale);
+        try testing.expectEqual(true, result.verbose);
+        try testing.expectEqual(true, result.dryrun);
+        try testing.expectEqualStrings("fast", result.mode);
+        try testing.expectEqual(@as(i32, 25), result.threshold);
+    }
+    // "pgm 42 1.5 -v -d"
+    {
+        const args = &[_][]const u8{
+            "pgm",
+            "42",
+            "1.5",
+            "-v",
+            "-d",
+        };
+
+        const result = try parseArgs(ta, def, args, nullout, nullout);
+
+        try testing.expectEqual(@as(u32, 42), result.count);
+        try testing.expectEqual(@as(f64, 1.5), result.scale);
+        try testing.expectEqual(true, result.verbose);
+        try testing.expectEqual(true, result.dryrun);
+    }
+    // "pgm 42 1.5 --mode fast --threshold 25"
+    {
+        const args = &[_][]const u8{
+            "pgm",
+            "42",
+            "1.5",
+            "--mode", "fast",
+            "--threshold", "25",
+        };
+
+        const result = try parseArgs(ta, def, args, nullout, nullout);
+
+        try testing.expectEqual(@as(u32, 42), result.count);
+        try testing.expectEqual(@as(f64, 1.5), result.scale);
+        try testing.expectEqualStrings("fast", result.mode);
+        try testing.expectEqual(@as(i32, 25), result.threshold);
+    }
+    // MISSING ONE REQUIRED "pgm 42 -v -d --mode fast --threshold 25"
+    {
+        const args = &[_][]const u8{
+            "pgm",
+            "42",
+            "-v",
+            "-d",
+            "--mode", "fast",
+            "--threshold", "25",
+        };
+
+
+        try testing.expectError(error.UnexpertedArgument, parseArgs(ta, def, args, nullout, nullout));
+    }
+    // NO REQUIREDS "pgm -v -d --mode fast -- threshold 25"
+    {
+        const args = &[_][]const u8{
+            "pgm",
+            "-v",
+            "-d",
+            "--mode", "fast",
+            "--threshold", "25",
+        };
+
+        try testing.expectError(error.UnexpertedArgument, parseArgs(ta, def, args, nullout, nullout));
+    }
 }
 
 test "Two subcommands with shared definition" {
@@ -107,7 +207,7 @@ test "Two subcommands with shared definition" {
     // "delete 100 --force"
     {
         const args = &[_][]const u8{ "pgm","delete", "100", "--force" };
-        const result = try parseArgs(def, args, nullout, nullout);
+        const result = try parseArgs(ta, def, args, nullout, nullout);
 
         try testing.expect(result.cmd == .delete); 
         // Verify values inside delete
@@ -119,7 +219,7 @@ test "Two subcommands with shared definition" {
     // "update 50 -r 5"
     {
         const args = &[_][]const u8{ "pgm","update", "50", "-r", "5" };
-        const result = try parseArgs(def, args, nullout, nullout);
+        const result = try parseArgs(ta, def, args, nullout, nullout);
 
         try testing.expect(result.cmd == .update);
         try testing.expectEqual(@as(u32, 50), result.cmd.update.id);
@@ -143,7 +243,7 @@ test "Subcommands with options/flags at multiple levels" {
 
     const args = &[_][]const u8{ "pgm","-g", "commit", "--amend", "fix bug" };
     
-    const result = try parseArgs(def, args, nullout, nullout);
+    const result = try parseArgs(ta, def, args, nullout, nullout);
 
     try testing.expectEqual(true, result.@"git-dir");
     try testing.expectEqualStrings("admin", result.user);
@@ -174,7 +274,7 @@ test "Two nested subcommands" {
 
     const args = &[_][]const u8{ "pgm","cloud", "server", "create", "--dry-run", "my-web-app" };
     
-    const result = try parseArgs(def, args, nullout, nullout);
+    const result = try parseArgs(ta, def, args, nullout, nullout);
     try testing.expect(result.cmd == .cloud);
     try testing.expect(result.cmd.cloud.cmd == .server);
     try testing.expect(result.cmd.cloud.cmd.server.cmd == .create);
@@ -191,26 +291,23 @@ test "Help shown" {
         
     // "-h"
     {
-        const args = &[_][]const u8{ "pgm","-h" };
-        // We expect parseArgs to return the error `HelpShown`
-        try testing.expectError(error.HelpShown, parseArgs(def, args, nullout, nullout));
+        const args = &[_][]const u8{ "pgm", "-h" };
+        try testing.expectError(error.HelpShown, parseArgs(ta, def, args, nullout, nullout));
     }
     // "--help"
     {
-        const args = &[_][]const u8{ "pgm","--help" };
-        // We expect parseArgs to return the error `HelpShown`
-        try testing.expectError(error.HelpShown, parseArgs(def, args, nullout, nullout));
+        const args = &[_][]const u8{ "pgm", "--help" };
+        try testing.expectError(error.HelpShown, parseArgs(ta, def, args, nullout, nullout));
     }
-
     //"help" (as a command/argument)
     {
-        const args = &[_][]const u8{ "pgm","help" };
-        try testing.expectError(error.HelpShown, parseArgs(def, args, nullout, nullout));
+        const args = &[_][]const u8{ "pgm", "help" };
+        try testing.expectError(error.HelpShown, parseArgs(ta, def, args, nullout, nullout));
     }
     // empty args
     {
         const args = &[_][]const u8{"pgm"};
-        try testing.expectError(error.HelpShown, parseArgs(def, args, nullout, nullout));
+        try testing.expectError(error.HelpShown, parseArgs(ta, def, args, nullout, nullout));
     }
 }
 
@@ -226,7 +323,7 @@ test "Mixed assignment styles (= vs space)" {
     };
 
     const args = &[_][]const u8{ "pgm", "123", "--mode=fast", "--count", "5", "-v" };
-    const result = try parseArgs(def, args, nullout, nullout);
+    const result = try parseArgs(ta, def, args, nullout, nullout);
 
     try testing.expectEqual(@as(u32, 123), result.id);
     try testing.expectEqualStrings("fast", result.mode);

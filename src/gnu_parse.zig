@@ -19,7 +19,7 @@ pub fn parseArgsRecursive(comptime definition: anytype, args: []const[]const u8,
    
     // if some element is help -h or --help just print help
     for (args, 0..) |arg, i| {
-        if (!consumed[i] and (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help"))) {
+        if (!consumed[i] and (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "help"))) {
             try parse.printUsage(definition, stdout);
             return error.HelpShown;
         }
@@ -170,6 +170,7 @@ pub fn parseArgsRecursive(comptime definition: anytype, args: []const[]const u8,
     i = 0;
     while (i < args.len) : (i += 1) {
         if (consumed[i]) continue;
+
         const current_arg = args[i];
         
         // safety check lol, a test failed
@@ -179,17 +180,19 @@ pub fn parseArgsRecursive(comptime definition: anytype, args: []const[]const u8,
         }
 
         if (@hasField(Definition, "required")) {
-            if (parsed_required >= definition.required.len) {
+            if (parsed_required > definition.required.len) {
                 try stderr.print("Error: UnexpectedArgument '{s}'\n", .{current_arg});
                 return error.UnexpectedArgument;
             }
 
             // parse
             inline for (definition.required, 0..) |req, j| {
-                if (j == parsed_required) 
+                if (j == parsed_required) { 
                     @field(result, req.field_name) = try parse.parseValue(req.type_id, current_arg);
                     parsed_required += 1;
                     consumed[i] = true;
+                    break;
+                }
             }
         } else {
             try stderr.writeAll("Error: catastrofic failure of the validation function. Cry.");
