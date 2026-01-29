@@ -3,6 +3,26 @@ const Io = std.Io;
 
 pub const ParseErrors = error { HelpShown, MissingArgument, MissingValue, UnknownArgument, UnexpectedArgument };
 
+pub fn printValueError(
+    writer: *Io.Writer, 
+    err: anyerror, 
+    arg_name: []const u8, 
+    raw_value: []const u8, 
+    comptime T: type
+) !void {
+    switch (err) {
+        error.InvalidValue => {
+            try writer.print("Error: Invalid value '{s}' for argument '{s}'. Expected type: {s}\n", .{ raw_value, arg_name, @typeName(T) });
+        },
+        error.UnsupportedType => {
+            try writer.print("Error: [Bug] The type '{s}' defined for '{s}' is not supported by EazyArgs.\n", .{ @typeName(T), arg_name });
+        },
+        else => {
+            try writer.print("Error: Failed to parse argument '{s}': {s}\n", .{ arg_name, @errorName(err) });
+        }
+    }
+}
+
 /// parses the values from the command line
 pub fn parseValue(comptime T: type, str: []const u8) !T {
     switch(@typeInfo(T)) {

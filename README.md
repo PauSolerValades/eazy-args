@@ -146,7 +146,9 @@ switch (args.cmd) {
 
 ## Nested Subcommands
 
-A command can be added inside a command lable, as the following example
+A command can be added inside a command lable, as the following example shows:
+
+:
 
 ## Help String
 

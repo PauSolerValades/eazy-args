@@ -66,20 +66,16 @@ pub fn parseArgsPosixRecursive(comptime definition: anytype, args: *Args.Iterato
 
 
             const eq_index = std.mem.indexOf(u8, current_arg, "=");
-            const arg_key = if (eq_index) |idx| current_arg[0..idx] else current_arg;
-            const arg_val_inline = if (eq_index) |idx| current_arg[idx+1..] else null;
-        
+            if (eq_index) |_| {
+                try stderr.print("Error: argument '{s}' uses an '=' to specify the value, this is not POSIX compliant\n", .{current_arg});
+            }
+
             if (has_flags) {
                 inline for (definition.flags) |flag| {
-                    const is_short = std.mem.eql(u8, arg_key, "--" ++ flag.field_name);
-                    const is_long = std.mem.eql(u8, arg_key, "-" ++ flag.field_short);
+                    const is_short = std.mem.eql(u8, current_arg, "--" ++ flag.field_name);
+                    const is_long = std.mem.eql(u8, current_arg, "-" ++ flag.field_short);
 
                     if(is_short or is_long) {
-
-                        if (arg_val_inline != null) {
-                            try stderr.print("Error: a flag ({s}) cannot take values.\n", .{arg_key});
-                            return error.UnexpectedValue;
-                        }
 
                         @field(result, flag.field_name) = true;
                         flag_detected = true;
@@ -89,20 +85,20 @@ pub fn parseArgsPosixRecursive(comptime definition: anytype, args: *Args.Iterato
 
            if (!flag_detected and has_options) {
                 inline for (definition.options) |opt| {
-                    const is_short = std.mem.eql(u8, arg_key, "--" ++ opt.field_name);
-                    const is_long = std.mem.eql(u8, arg_key, "-" ++ opt.field_short);
+                    const is_short = std.mem.eql(u8, current_arg, "--" ++ opt.field_name);
+                    const is_long = std.mem.eql(u8, current_arg, "-" ++ opt.field_short);
 
                     if(is_short or is_long) {
-                        if (arg_val_inline) |val| { // is an --opt=val 
-                            @field(result, opt.field_name) = try parse.parseValue(opt.type_id, val);
-                        } else { // is an --opt val
-                            const val = args.next(); 
-                            if (val) |v| {
-                                @field(result, opt.field_name) = try parse.parseValue(opt.type_id, v);
-                            } else {
-                                try stderr.print("Error: null value on options '{s}'\n", .{arg_key});
-                            }
+                        const val = args.next(); 
+                        if (val) |v| {
+                            @field(result, opt.field_name) = parse.parseValue(opt.type_id, v) catch |err| {
+                                try parse.printValueError(stderr, err, opt.field_name, v, opt.type_id);
+                                return err;
+                            };
+                        } else {
+                            try stderr.print("Error: null value on options '{s}'\n", .{current_arg});
                         }
+                        
                         
                         flag_detected = true;
                     }
@@ -163,7 +159,10 @@ pub fn parseArgsPosixRecursive(comptime definition: anytype, args: *Args.Iterato
 
             inline for (definition.required, 0..) |req, j| {
                 if (j == parsed_required) 
-                    @field(result, req.field_name) = try parse.parseValue(req.type_id, current_arg);
+                    @field(result, req.field_name) = parse.parseValue(req.type_id, current_arg) catch |err| {
+                        try parse.printValueError(stderr, err, req.field_name, current_arg, req.type_id );
+                        return err;
+                    };
                     parsed_required += 1;
             }
         } else {
