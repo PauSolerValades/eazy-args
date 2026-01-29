@@ -71,6 +71,7 @@ const ta = testing.allocator;
 const tio = testing.io;
 var w = std.Io.File.stdout().writer(tio, &.{});
 const nullout = &w.interface;
+const IteratorGeneral = std.process.Args.IteratorGeneral;
 
 const Arg = structs.Argument; 
 const Opt = structs.Option;
@@ -91,17 +92,25 @@ test "Normal parsing: required, flags, options" {
         try testing.expectEqual(true, result.verbose);
         try testing.expectEqualStrings("fast", result.mode);
     }
-    // {
-    //     // How the fuck do I create an Arg.Iterator?
-    //     const args = &[_][]const u8{ "pgm","-v", "--mode", "fast", "42" };
-    //     const result = try parseArgs(def, args, nullout, nullout);
-    //
-    //     try testing.expectEqual(@as(u32, 42), result.count);
-    //     try testing.expectEqual(true, result.verbose);
-    //     try testing.expectEqualStrings("fast", result.mode);
-    //
-    // }
-    }
+}
+
+test "alone" {
+    const def = .{
+        .required = .{ Arg(u32, "count", "The number of items") },
+        .flags = .{ Flag("verbose", "v", "Enable verbose output") },
+        .options = .{ Opt([]const u8, "mode", "m", "default", "Operation mode") },
+    };
+
+    const fake_argv = &[_][*:0]const u8{ "utility", "-v", "-p", "diablo", "500"};
+    const args = Args{ .vector = fake_argv };
+    var iter = Args.Iterator.init(args);
+    
+    const result = try parseArgsPosix(def, &iter, nullout, nullout);
+
+    try testing.expectEqual(@as(u32, 500), result.count);
+    try testing.expectEqual(true, result.verbose);
+    try testing.expectEqualStrings("diablo", result.mode);
+}
 
 test "Normal parsing: 2 args, 2 flags, 2 options" {
     const def = .{
@@ -221,8 +230,6 @@ test "Parsing optional with ?type (Tally Example)" {
             },
         }
     };
-
-    // Case 1: With the optional project ID provided
     // "tally entry start 'hello' -p 1"
     {
         const args = &[_][]const u8{ "tally", "entry", "start", "hello", "-p", "1" };
@@ -236,12 +243,9 @@ test "Parsing optional with ?type (Tally Example)" {
         const start_cmd = result.cmd.entry.cmd.start;
         try testing.expectEqualStrings("hello", start_cmd.description);
 
-        // Check the optional ?u64
         try testing.expect(start_cmd.projectid != null);
         try testing.expectEqual(@as(u64, 1), start_cmd.projectid.?);
     }
-
-    // Case 2: Without the optional project ID
     // "tally entry start 'meeting'"
     {
         const args = &[_][]const u8{ "tally", "entry", "start", "meeting" };
