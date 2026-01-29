@@ -6,8 +6,9 @@ Absolutely inspired by @gouwsxander [easy-args](https://github.com/gouwsxander/e
 ## Main Idea
 
 
-EazyArgs leverages type [reification](https://en.wikipedia.org/wiki/Reification_(computer_science)) (create a type instead given a definition instead of explicitly writing it) to allow a much simpler and categorical definition. To parse your program arguments, you just need to define which `flags` the program accepts, which `options` and which `required` (positional) arguments are needed instead of defining the struct, as well as allowing to nest as many definitions as you want with `commands`.
+EazyArgs leverages type [reification](https://en.wikipedia.org/wiki/Reification_(computer_science)) (create a type from a given definition instead of explicitly writing the type) to allow a much simpler and categorical definition. To parse your program arguments, you just need to define which `flags` the program accepts, which `options` and which `required` (positional) arguments are needed instead of writing the struct code. Additionally, supports `commands` to nest definitions inside the main definition.
 
+Features:
 + **Simple, No Boilerplate**: Define your arguments once. The library generates the types, the validation, and the parser automatically.
 + **Categorical & Nested**: cleanly separate Flags, Options, and Positional arguments. Nest commands as deep as you need (e.g., git remote add origin).
 + [TODO] **Help Generation**: Usage strings are automatically generated from your definitions.
@@ -15,8 +16,9 @@ EazyArgs leverages type [reification](https://en.wikipedia.org/wiki/Reification_
 + **Compile-time Specialized**: The validation happens at compile-time. The parser uses `inline` loops, meaning the resulting machine code is optimized specifically for your definition—no generic runtime overhead.
 
 ## Simple Example
+_[See `examples/simple_example.zig`]_
 
-Import the library and the argument structs and create a tuple like the following code:
+Import the library and the following structs. Then create a tuple like the following code:
 
 ```zig
 const argz = @import("eazy_args");
@@ -41,7 +43,7 @@ const definition = .{
 };
 ```
 
-Then parse it with the `parseArgs` function.
+Parse it with the `parseArgs` function to obtain a struct with all the command line arguments parsed.
 
 ```zig
 const args = try init.minimal.args.toSlice(init.gpa); 
@@ -58,7 +60,7 @@ const gnuargs = argz.parseArgs(init.gpa, definition, args, stdout, stderr) catch
 
 ## Features
 
-The function seen in the previous example, `parseArgs`, implements the GNU [Program Argument Syntax Conventions](https://sourceware.org/glibc/manual/latest/html_mono/libc.html#Program-Arguments). This is what imposes the least restrictive parsing rules, where any option can be in any order, that is `utility 100 "Pau" -b 100 -s 0.5 -v -o` and any combination of those - e.g. `utility -b 20 100 -v -o "Pau" -s 0.5`, despite being super bizarre, will be parsed -  and the `=` can be used to specify the value of options `--break=100`.
+The function seen in the previous example, `parseArgs`, implements the GNU [Program Argument Syntax Conventions](https://sourceware.org/glibc/manual/latest/html_mono/libc.html#Program-Arguments): any argument can be in provided at any point, that is `utility 100 "Pau" -b 100 -s 0.5 -v -o` and any permutation of those - e.g. `utility -b 20 100 -v -o "Pau" -s 0.5`, despite being super bizarre - will be properly parsed. If also supports providing and option as `--break=100` using the `=` instead of the space.
 
 [TODO: POSIX IS STILL WORK IN PROGRESS]
 EazyArgs also provides a POSIX compliant with the [Utility Argument Syntax](https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap12.html) parse function, `parseArgsPosix` like the following code. (TODO: fix the = to not be possible, think to implement or and the [ ] name parsing)
@@ -83,15 +85,16 @@ utility_name [-a] [-b] [-c option_argument] [-d|-e] [-f[option_argument]] [requi
 
 The POSIX implementation has three main advantages directly related to the strict argument order when compared to `parseArgs`.
 + No dynamic memory: there is no need to use memory allocation, so no `Allocator` needed.
-+ No arg slice: the function accepts a `*Args.Iterator` instead of an slice. This will require an allocator in Windows `var iter = init.minimal.args.iterateAllocator(allocator)`.
++ No arg slice: the function accepts a `*std.process.Args.Iterator` instead of an slice. This will require an allocator in Windows `var iter = init.minimal.args.iterateAllocator(allocator)`.
 + Efficiency: it's exactly $O(n)$ complexity, where n is the number of element in the *Args.Iterator. `parseArgs` requires three full sweeps over the original list for every different command and subcommands of that (it grows to the cube).
 
 
 ## Command example
+_[See `examples/database.zig`]_
 
-Adding commands in the definition can be done with the following syntax:
+Adding commands in the definition can be done adding a `command` label and defining the names of the commands, like the following snippet shows:
 
-```
+```zig
 const definition = .{
     .flags = .{ Flag("verbose", "v", "Enable detailed logging") },
     .commands = .{
@@ -110,12 +113,12 @@ const definition = .{
 };
 ```
 
-This will generate a `cmd: TaggedUnion` in the struct, where the Enum is `{query, backup}`. 
+This will generate a `cmd: TaggedUnion` in the struct, where the Enum is `{query, backup}` (all the labels provided inside the command tuple). 
 
-The parsed struct contains your global flags and a cmd field, which is a union of your subcommands.
+The parsed struct contains your global flags and a `cmd` field, which is a union of the subcommands provided.
 
 ```zig
-const args = try eaz.parseArgs(definition, os_args, stdout, stderr);
+const args = try argz.parseArgs(definition, iter, stdout, stderr);
 
 // global flag access is at the root
 if (args.verbose) {
@@ -126,9 +129,9 @@ if (args.verbose) {
 try stdout.print("Selected command: {s}\n", .{ @tagName(args.cmd) });
 ```
 
-Since `cmd` is a tagged union, the most ergonomic way to handle logic is a switch statement. This gives you type-safe access to the specific fields of query or backup.
+Since `cmd` is a tagged union, the most ergonomic way to branch the flow of the program is a switch statement on the `cmd` argument. This gives you type-safe access to the specific fields of query or backup.
 
-```
+```zig
 switch (args.cmd) {
     .query => |q| {
         try stdout.print("Running SQL: \"{s}\"\n", .{q.statement});
@@ -146,8 +149,9 @@ switch (args.cmd) {
 ```
 
 ## Nested Subcommands
+_[See `exapmles/tally.zig`]_
 
-A command can be added inside a command lable, as the following example (a nice terminal time tracker) shows:
+Commands can be defined one inside the other adding a `command` inside the label, as the following example (a nice terminal time tracker) shows. The example uses variables to make the definition more readable.
 
 ```zig
  const entry_start = .{
@@ -188,11 +192,11 @@ const def = .{
 ```
 
 To allow for multiple nesting within commands the following rules will be enforced by the compiler:
-1. In each level there is either a `required` or a `commands`, there cannot be both.
+1. In each level there is either a `required` or a `commands`, they are mutually exclusive.
 2. Once a `required` appears in a given level, no sublevel under it can contain a `command`.
 3. `flags` and `options` are optional, and can or can't appear.
 
-Once parsed, it can be accessed with a switch statement with switch statements on the inside:
+Once parsed, it can be accessed with nested switch statements:
 ```
 
 ```zig
@@ -234,7 +238,6 @@ Once parsed, it can be accessed with a switch statement with switch statements o
         }
     }
 ```
-
 
 
 ## Help String
