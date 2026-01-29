@@ -55,6 +55,6 @@ pub fn main(init: std.process.Init) !void {
         std.process.exit(0);
     };
 
-    // try stdout.print("Parsed with POSIX:\n {any}\n", .{posixargs});
+    try stdout.print("Parsed with POSIX:\n {any}\n", .{posixargs});
     try stdout.flush();
 }

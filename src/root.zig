@@ -202,6 +202,61 @@ test "Normal parsing: 2 args, 2 flags, 2 options" {
     }
 }
 
+test "Parsing optional with ?type (Tally Example)" {
+    const entry_start = .{
+        .required = .{ Arg([]const u8, "description", "What are you doing now?") },
+        // Corrected: Name "projectid", Short "p"
+        .options = .{ Opt(?u64, "projectid", "p", null, "Which project the entry belongs to")}
+    };
+
+    const def = .{
+        .flags = .{ Flag("verbose", "v", "Print more" ) },
+        .commands = .{
+            .entry = .{
+                .commands = .{
+                    .start = entry_start,
+                    .stop = .{},
+                    .status = .{},
+                }
+            },
+        }
+    };
+
+    // Case 1: With the optional project ID provided
+    // "tally entry start 'hello' -p 1"
+    {
+        const args = &[_][]const u8{ "tally", "entry", "start", "hello", "-p", "1" };
+        const result = try parseArgs(ta, def, args, nullout, nullout);
+
+        // 1. Check Global Flag (should be false/default)
+        try testing.expectEqual(false, result.verbose);
+
+        // 2. Check Command Path
+        try testing.expect(result.cmd == .entry);
+        try testing.expect(result.cmd.entry.cmd == .start);
+
+        // 3. Check Leaf Arguments
+        const start_cmd = result.cmd.entry.cmd.start;
+        try testing.expectEqualStrings("hello", start_cmd.description);
+        
+        // Check the optional ?u64
+        try testing.expect(start_cmd.projectid != null);
+        try testing.expectEqual(@as(u64, 1), start_cmd.projectid.?);
+    }
+
+    // Case 2: Without the optional project ID
+    // "tally entry start 'meeting'"
+    {
+        const args = &[_][]const u8{ "tally", "entry", "start", "meeting" };
+        const result = try parseArgs(ta, def, args, nullout, nullout);
+
+        const start_cmd = result.cmd.entry.cmd.start;
+        try testing.expectEqualStrings("meeting", start_cmd.description);
+        
+        // Check that it is null
+        try testing.expect(start_cmd.projectid == null);
+    }
+}
 test "Two subcommands with shared definition" {
     const subdef = .{
         .required = .{ Arg(u32, "id", "Resource ID") },

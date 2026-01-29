@@ -82,13 +82,13 @@ utility_name [-a] [-b] [-c option_argument] [-d|-e] [-f[option_argument]] [requi
 
 The POSIX implementation has three main advantages directly related to the strict argument order when compared to `parseArgs`.
 + No dynamic memory: there is no need to use memory allocation, so no `Allocator` needed.
-+ No arg slice: the function accepts a `*Args.Iterator` instead of an slice. This will require an allocator in Windows `var iter = init.minimal.args.iterateAllocator(init.gpa)`.
++ No arg slice: the function accepts a `*Args.Iterator` instead of an slice. This will require an allocator in Windows `var iter = init.minimal.args.iterateAllocator(allocator)`.
 + Efficiency: it's exactly $O(n)$ complexity, where n is the number of element in the *Args.Iterator. `parseArgs` requires three full sweeps over the original list for every different command and subcommands of that (it grows to the cube).
 
 
 ## Command example
 
-Adding commands in the definition can be done with the following syntax in definition:
+Adding commands in the definition can be done with the following syntax:
 
 ```
 const definition = .{
@@ -113,26 +113,25 @@ This will generate a `cmd: TaggedUnion` in the struct, where the Enum is `{query
 
 The parsed struct contains your global flags and a cmd field, which is a union of your subcommands.
 
-```
+```zig
 const args = try eaz.parseArgs(definition, os_args, stdout, stderr);
 
-// 1. Access Global Flags directly at the root
+// global flag access is at the root
 if (args.verbose) {
-    std.debug.print("[LOG] Verbose mode enabled\n", .{});
+    try stdout.print("[LOG] Verbose mode enabled\n", .{});
 }
 
-// 2. The 'cmd' field holds the active subcommand
-// You can check which command was selected using the active tag:
-std.debug.print("Selected command: {s}\n", .{ @tagName(args.cmd) });
+// active tag tells you which command has been selected
+try stdout.print("Selected command: {s}\n", .{ @tagName(args.cmd) });
 ```
 
-Since cmd is a tagged union, the most ergonomic way to handle logic is a switch statement. This gives you type-safe access to the specific fields of query or backup.
+Since `cmd` is a tagged union, the most ergonomic way to handle logic is a switch statement. This gives you type-safe access to the specific fields of query or backup.
 
 ```
 switch (args.cmd) {
     .query => |q| {
         try stdout.print("Running SQL: \"{s}\"\n", .{q.statement});
-        // your funtionality here
+        // doSomeStuff(); 
         try stdout.print("Limit: {d} | Format: {s}\n", .{ q.limit, q.format });
     },
     .backup => |b| {
@@ -140,14 +139,14 @@ switch (args.cmd) {
         if (b.compress) {
             try stdout.print("(Compression enabled)\n", .{});
         }
-        // your funtionality here
+        // doSomeStuff()
     },
 }
 ```
 
 ## Nested Subcommands
 
-TBD
+A command can be added inside a command lable, as the following example
 
 ## Help String
 
