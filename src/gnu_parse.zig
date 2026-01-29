@@ -73,8 +73,8 @@ pub fn parseArgsRecursive(comptime definition: anytype, args: []const[]const u8,
 
             if (has_flags) {
                 inline for (definition.flags) |flag| {
-                    const is_short = std.mem.eql(u8, arg_key, "--" ++ flag.field_name);
-                    const is_long = std.mem.eql(u8, arg_key, "-" ++ flag.field_short);
+                    const is_short = std.mem.eql(u8, arg_key, "-" ++ flag.field_name);
+                    const is_long = std.mem.eql(u8, arg_key, "--" ++ flag.field_short);
 
                     if(is_short or is_long) {
 
@@ -92,8 +92,8 @@ pub fn parseArgsRecursive(comptime definition: anytype, args: []const[]const u8,
 
             if (!matched and has_options) {
                 inline for (definition.options) |opt| {
-                    const is_short = std.mem.eql(u8, arg_key, "--" ++ opt.field_name);
-                    const is_long = std.mem.eql(u8, arg_key, "-" ++ opt.field_short);
+                    const is_short = std.mem.eql(u8, arg_key, "-" ++ opt.field_name);
+                    const is_long = std.mem.eql(u8, arg_key, "--" ++ opt.field_short);
 
                     if(is_short or is_long) {
                         // is an --opt=val 
