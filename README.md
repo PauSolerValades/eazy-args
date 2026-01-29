@@ -60,6 +60,7 @@ const gnuargs = argz.parseArgs(init.gpa, definition, args, stdout, stderr) catch
 
 The function seen in the previous example, `parseArgs`, implements the GNU [Program Argument Syntax Conventions](https://sourceware.org/glibc/manual/latest/html_mono/libc.html#Program-Arguments). This is what imposes the least restrictive parsing rules, where any option can be in any order, that is `utility 100 "Pau" -b 100 -s 0.5 -v -o` and any combination of those - e.g. `utility -b 20 100 -v -o "Pau" -s 0.5`, despite being super bizarre, will be parsed -  and the `=` can be used to specify the value of options `--break=100`.
 
+[TODO: POSIX IS STILL WORK IN PROGRESS]
 EazyArgs also provides a POSIX compliant with the [Utility Argument Syntax](https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap12.html) parse function, `parseArgsPosix` like the following code. (TODO: fix the = to not be possible, think to implement or and the [ ] name parsing)
 
 ```zig
@@ -146,12 +147,98 @@ switch (args.cmd) {
 
 ## Nested Subcommands
 
-A command can be added inside a command lable, as the following example shows:
+A command can be added inside a command lable, as the following example (a nice terminal time tracker) shows:
 
-:
+```zig
+ const entry_start = .{
+    .required = .{ Arg([]const u8, "description", "What are you doing now?") },
+    .options = .{ Opt(?u64, "projectid", "p", null, "Which project the entry belongs to")}
+};
+
+const project_create = .{
+    .required = .{ Arg([]const u8, "description", "What project are you doing") },
+    .options = .{ Opt(?u64, "parent", "p", null, "Which project is this under?")}
+};
+
+const project_rename = .{
+    .required = .{ 
+        Arg(u64, "projectid", "Project to change the name"),
+        Arg([]const u8, "name", "New name for the project"),
+    }
+};
+
+const def = .{
+    .flags = .{ Flag("v", "verbose", "Print more" ) },
+    .commands = .{
+        .entry = .{
+            .commands = .{
+            .start = entry_start,
+            .status = .{},
+            .stop = .{},
+            }
+        },
+        .project = .{
+            .commands = .{
+                .create = project_create,
+                .rename = project_rename,
+            }
+        },
+    }
+};
+```
+
+To allow for multiple nesting within commands the following rules will be enforced by the compiler:
+1. In each level there is either a `required` or a `commands`, there cannot be both.
+2. Once a `required` appears in a given level, no sublevel under it can contain a `command`.
+3. `flags` and `options` are optional, and can or can't appear.
+
+Once parsed, it can be accessed with a switch statement with switch statements on the inside:
+```
+
+```zig
+    const args = try init.minimal.args.toslice(init.gpa);
+    defer init.gpa.free(args);
+    const arguments = argz.parseargs(init.gpa, def, args, stdout, stderr) catch |err| {
+        switch (err) {
+            parseerrors.helpshown => try stdout.flush(),
+            else => try stderr.flush(),
+        }
+        std.process.exit(0);
+    };
+    
+    // access it with a switch, clean and easy (args haha)
+    switch (arguments.cmd) {
+        .entry => |entry_cmd| {
+            switch (entry_cmd.cmd) {
+                .start => |start_args| {
+                    try stdout.print("'entry start' detected!\n", .{});
+                    if (start_args.projectid) |pid| {
+                        try stdout.print("detected pid: {d}\n", .{pid});
+                    } else {
+                        try stdout.writeall("no pid detected\n");
+                    }
+                },
+                .stop => try stdout.writeall("'entry stop' detected!\n"),
+                .status => try stdout.writeall("'entry status' detected!\n"),
+            }
+        },
+        .project => |project_cmd| {
+            switch (project_cmd.cmd) {
+                .create => |create_args| {
+                     try stdout.print("creating project: {s}\n", .{create_args.description});
+                },
+                .rename => |rename_args| {
+                     try stdout.print("renaming id {d} to {s}\n", .{rename_args.projectid, rename_args.name});
+                }
+            } 
+        }
+    }
+```
+
+
 
 ## Help String
-
+[TODO: make it hehe]
 Use `help` as a first argument to print the help string:
 
 ```

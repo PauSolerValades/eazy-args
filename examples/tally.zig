@@ -35,7 +35,7 @@ pub fn main(init: std.process.Init) !void {
 
  
     const def = .{
-        .flags = .{ Flag("v", "verbose", "Print more" ) },
+        .flags = .{ Flag("verbose", "v", "Print more" ) },
         .commands = .{
             .entry = .{
                 .commands = .{
