@@ -13,6 +13,8 @@ pub fn parseValue(comptime T: type, str: []const u8) !T {
             else if (std.mem.eql(u8, str, "false")) { return false; }
             else { return error.InvalidArgument; }
         },
+        .optional => |opt| return try parseValue(opt.child, str), 
+        
         else => {
             if (T == []const u8) {
                 return str;

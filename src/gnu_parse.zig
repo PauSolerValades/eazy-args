@@ -8,6 +8,27 @@ const reification = @import("reification.zig");
 const Reify = reification.Reify;
 const parseErrors = parse.ParseErrors;
 
+
+fn printValueError(
+    writer: *Io.Writer, 
+    err: anyerror, 
+    arg_name: []const u8, 
+    raw_value: []const u8, 
+    comptime T: type
+) !void {
+    switch (err) {
+        error.InvalidValue => {
+            try writer.print("Error: Invalid value '{s}' for argument '{s}'. Expected type: {s}\n", .{ raw_value, arg_name, @typeName(T) });
+        },
+        error.UnsupportedType => {
+            try writer.print("Error: [Bug] The type '{s}' defined for '{s}' is not supported by EazyArgs.\n", .{ @typeName(T), arg_name });
+        },
+        else => {
+            try writer.print("Error: Failed to parse argument '{s}': {s}\n", .{ arg_name, @errorName(err) });
+        }
+    }
+}
+
 /// The function parses 
 /// Rules on the parsing:
 /// 1. Each level contains either a positional (required) or a command
@@ -97,7 +118,10 @@ pub fn parseArgsRecursive(comptime definition: anytype, args: []const[]const u8,
                     if(is_short or is_long) {
                         // is an --opt=val 
                         if (arg_val_inline) |val| {
-                            @field(result, opt.field_name) = try parse.parseValue(opt.type_id, val);
+                            @field(result, opt.field_name) = parse.parseValue(opt.type_id, val) catch |err| {
+                                try printValueError(stderr, err, arg_key, val, opt.type_id);
+                                return err; 
+                            };
                         } else { // is an --opt val
                             // serach the first non used argument 
                             var next_idx = i+1;
@@ -107,8 +131,12 @@ pub fn parseArgsRecursive(comptime definition: anytype, args: []const[]const u8,
                                 try stderr.print("Error: Option '{s}' does not have a value\n", .{opt.field_name});
                                 return error.MissingValue;
                             }
-                       
-                            @field(result, opt.field_name) = try parse.parseValue(opt.type_id, args[i+1]);
+                            
+                            const val = args[i+1];
+                            @field(result, opt.field_name) = parse.parseValue(opt.type_id, val) catch |err| {
+                                try printValueError(stderr, err, arg_key, val, opt.type_id);
+                                return err; 
+                            };
                             consumed[next_idx] = true; 
                         }
                         
@@ -188,7 +216,10 @@ pub fn parseArgsRecursive(comptime definition: anytype, args: []const[]const u8,
             // parse
             inline for (definition.required, 0..) |req, j| {
                 if (j == parsed_required) { 
-                    @field(result, req.field_name) = try parse.parseValue(req.type_id, current_arg);
+                    @field(result, req.field_name) = parse.parseValue(req.type_id, current_arg) catch |err| {
+                        try printValueError(stderr, err, req.field_name, current_arg, req.type_id);
+                        return err; 
+                    };
                     parsed_required += 1;
                     consumed[i] = true;
                     break;

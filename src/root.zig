@@ -228,17 +228,14 @@ test "Parsing optional with ?type (Tally Example)" {
         const args = &[_][]const u8{ "tally", "entry", "start", "hello", "-p", "1" };
         const result = try parseArgs(ta, def, args, nullout, nullout);
 
-        // 1. Check Global Flag (should be false/default)
         try testing.expectEqual(false, result.verbose);
 
-        // 2. Check Command Path
         try testing.expect(result.cmd == .entry);
         try testing.expect(result.cmd.entry.cmd == .start);
 
-        // 3. Check Leaf Arguments
         const start_cmd = result.cmd.entry.cmd.start;
         try testing.expectEqualStrings("hello", start_cmd.description);
-        
+
         // Check the optional ?u64
         try testing.expect(start_cmd.projectid != null);
         try testing.expectEqual(@as(u64, 1), start_cmd.projectid.?);
