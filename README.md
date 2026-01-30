@@ -62,8 +62,7 @@ const gnuargs = argz.parseArgs(init.gpa, definition, args, stdout, stderr) catch
 
 The function seen in the previous example, `parseArgs`, implements the GNU [Program Argument Syntax Conventions](https://sourceware.org/glibc/manual/latest/html_mono/libc.html#Program-Arguments): any argument can be in provided at any point, that is `utility 100 "Pau" -b 100 -s 0.5 -v -o` and any permutation of those - e.g. `utility -b 20 100 -v -o "Pau" -s 0.5`, despite being super bizarre - will be properly parsed. If also supports providing and option as `--break=100` using the `=` instead of the space.
 
-[TODO: POSIX IS STILL WORK IN PROGRESS]
-EazyArgs also provides a POSIX compliant with the [Utility Argument Syntax](https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap12.html) parse function, `parseArgsPosix` like the following code. (TODO: fix the = to not be possible, think to implement or and the [ ] name parsing)
+EazyArgs also provides a POSIX compliant with the [Utility Argument Syntax](https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap12.html) parse function, `parseArgsPosix` like the following code.
 
 ```zig
 var iter = init.minimal.args.iterate(); 
@@ -88,6 +87,7 @@ The POSIX implementation has three main advantages directly related to the stric
 + No arg slice: the function accepts a `*std.process.Args.Iterator` instead of an slice. This will require an allocator in Windows `var iter = init.minimal.args.iterateAllocator(allocator)`.
 + Efficiency: it's exactly $O(n)$ complexity, where n is the number of element in the *Args.Iterator. `parseArgs` requires three full sweeps over the original list for every different command and subcommands of that (it grows to the cube).
 
+At the end of the README there is a section regarding fully compliance with POSIX standards, which features are supported and not.
 
 ## Command example
 _[See `examples/database.zig`]_
@@ -281,4 +281,29 @@ Flag (Boolean Switch)
 
 Note: Flags are always bool and default to false.
 
+## About _strict_ POSIX compliance
 
+Right now, the following features are not supported, but will be:
+- -- to denote the end (this is also not supported in GNU)
+- concatenate multiple flags in one (eg `-abv ` instead of `-a -b -v`)
+- Option with an optional argument -f[value], will be implemented with another object `LinkedOption` which can colive with `.option` 
+
+Probably, the only option the library will not implement is mutually exclusive flags (`[-a|-b]`). This behaviour is much easily enforced by the user afterwards with simple if statements:
+
+```
+if (args.quiet and args.verbose) std.process.exit(0)
+```
+
+Rather than making something like the following snippet in the definition:
+```
+const def = .{
+  .flags = .{
+    .required = .{ Flag("quiet", "q", "Don't print"), Flag("verbose", "v", "Print more") },
+    Flag("normal", "n", "another flag which is not exclusive"),
+  }
+}
+```
+
+But I have to think about it.
+
+Lastly, POSIX does not allow a double representation of the same flag `-v/--verbose` so the `parseArgsPosix` should not allow it. I have mixed feelings about this: removing it would be the "correct" thing to make exactly POSIX but i feel long/short options and flags are super standard nowadays, so I really wonder if levaing the option and if you want an exactly posix compilant just don't use it is maybe the most user friendly approach?
