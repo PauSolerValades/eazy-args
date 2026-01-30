@@ -25,7 +25,6 @@ pub fn parseArgsPosixRecursive(comptime definition: anytype, args: *Args.Iterato
     // as a standard, we check if a field exists in definition not in result : ReArgs
     // that means @hasField(definition, ...) and NOT @hasField(result, ...)
     const Definition = @TypeOf(definition);
-    //const typeInfo = @typeInfo(T);
 
     const has_flags = @hasField(Definition, "flags");
     const has_options = @hasField(Definition, "options");
@@ -47,43 +46,46 @@ pub fn parseArgsPosixRecursive(comptime definition: anytype, args: *Args.Iterato
     }
    
     var parsed_required: usize = 0;
-    var positional_started = false;
 
-    while (args.next()) |current_arg| {
+    var all_flags_and_options_parsed = false;
+    var all_commands_parsed = false; // this means positional starts
+    var is_args_empty = true; // això és molt cutre però no se m'acut res millor xd
+
+    args_loop: while (args.next()) |current_arg| {
         
-        if (std.mem.eql(u8, current_arg, "-h") or std.mem.eql(u8, current_arg, "--help")) {
+        is_args_empty = false;
+
+        if (std.mem.eql(u8, current_arg, "-h") or std.mem.eql(u8, current_arg, "--help") or std.mem.eql(u8, current_arg, "help")) {
             try parse.printUsage(definition, stdout);
             return error.HelpShown;
         }
-        
-        var flag_detected = false;
-        if (!positional_started and std.mem.startsWith(u8, current_arg, "-")) {
+       
+        var match = false;
+        // Everything that starts with '-' can be either a flag and an option
+        if (!all_flags_and_options_parsed and std.mem.startsWith(u8, current_arg, "-")) {
             
-            if (std.mem.eql(u8, current_arg, "--")) {
-                positional_started = true;
-                continue;
-            }
-
-
             const eq_index = std.mem.indexOf(u8, current_arg, "=");
             if (eq_index) |_| {
                 try stderr.print("Error: argument '{s}' uses an '=' to specify the value, this is not POSIX compliant\n", .{current_arg});
+                return error.InvalidPosix;
             }
 
             if (has_flags) {
                 inline for (definition.flags) |flag| {
-                    const is_short = std.mem.eql(u8, current_arg, "--" ++ flag.field_name);
-                    const is_long = std.mem.eql(u8, current_arg, "-" ++ flag.field_short);
+                    const is_long = std.mem.eql(u8, current_arg, "--" ++ flag.field_name);
+                    const is_short = std.mem.eql(u8, current_arg, "-" ++ flag.field_short);
 
                     if(is_short or is_long) {
-
                         @field(result, flag.field_name) = true;
-                        flag_detected = true;
+                        match = true;
                     }
                 }
             }
-
-           if (!flag_detected and has_options) {
+            
+            if (match) continue :args_loop;
+            
+            // OPTIONS
+            if (has_options) {
                 inline for (definition.options) |opt| {
                     const is_short = std.mem.eql(u8, current_arg, "--" ++ opt.field_name);
                     const is_long = std.mem.eql(u8, current_arg, "-" ++ opt.field_short);
@@ -91,29 +93,31 @@ pub fn parseArgsPosixRecursive(comptime definition: anytype, args: *Args.Iterato
                     if(is_short or is_long) {
                         const val = args.next(); 
                         if (val) |v| {
+                            if (std.mem.startsWith(u8, v, "-")) {
+                                try stderr.print("Error: option ' {s}' has a value starting with '-' ({s})\n", .{current_arg, v});
+                                return error.InvalidPosix;
+                            }
                             @field(result, opt.field_name) = parse.parseValue(opt.type_id, v) catch |err| {
                                 try parse.printValueError(stderr, err, opt.field_name, v, opt.type_id);
                                 return err;
                             };
+                            match = true; 
                         } else {
                             try stderr.print("Error: null value on options '{s}'\n", .{current_arg});
+                            return error.InvalidOptions;
                         }
-                        
-                        
-                        flag_detected = true;
                     }
                 }
             }
+
+            if (match) continue :args_loop;
         }
-                     
-        if (flag_detected) continue;
         
-        if (!positional_started and has_commands) {
-            // get the type of the command field
-            // serach in the ReArgs because we are looking for the Union to get which commands
-            // have been already defined
-            // It could be done in definition.commands and iterate over there but that would waste a part
-            // of what has been done in Reify, where the Enum has been generated
+        // if your code arrives here, all '-' have been compared
+        all_flags_and_options_parsed = true;
+
+        // COMMANDS, call yourself to parse whatever is inside
+        if (has_commands and !all_commands_parsed) {
             const CommandUnion = comptime find_cmd: {
                 const fields = @typeInfo(ReArgs).@"struct".fields;
                 for (fields) |f| {
@@ -127,14 +131,10 @@ pub fn parseArgsPosixRecursive(comptime definition: anytype, args: *Args.Iterato
             const CommandTag = std.meta.Tag(CommandUnion);
 
             if (std.meta.stringToEnum(CommandTag, current_arg)) |command_tag| {
-                // we need to access the definition.commands.@value(current_arg) (eg: def.commands.entry)
-                // to do that we cannot use @field because current_arg is not comptime
-                // we have to generate all the code for the possible args with the inline else.
                 switch (command_tag) {
                     inline else => |tag| {
                         const name: []const u8 = @tagName(tag); // converts the enum into a string
                         const def_subcmd = @field(definition.commands, name);
-                        // we know this is a valid command, so we recursively parse the Args 
                         const parsedCmd = try parseArgsPosixRecursive(def_subcmd, args, stdout, stderr); // POINTER TO THE SAME ITERATOR
                         result.cmd = @unionInit(CommandUnion, name, parsedCmd);              
 
@@ -143,12 +143,13 @@ pub fn parseArgsPosixRecursive(comptime definition: anytype, args: *Args.Iterato
                 }
             } 
         }
-    
-        // positional arguments
-        positional_started = true;
+   
+        // REQUIRED
+        all_commands_parsed = true;
 
         if (std.mem.startsWith(u8, current_arg, "-")) {
             try stderr.writeAll("Error: flag detected when required argument expected.\n");
+            return error.InvalidPosix;
         }
 
         if (has_required) {
@@ -157,6 +158,7 @@ pub fn parseArgsPosixRecursive(comptime definition: anytype, args: *Args.Iterato
                 return error.UnexpectedArgument;
             }
 
+            // no need for a boolean, all the requireds get parsed inmediately
             inline for (definition.required, 0..) |req, j| {
                 if (j == parsed_required) 
                     @field(result, req.field_name) = parse.parseValue(req.type_id, current_arg) catch |err| {
@@ -169,29 +171,23 @@ pub fn parseArgsPosixRecursive(comptime definition: anytype, args: *Args.Iterato
             try stderr.print("Error: UnexpectedArgument '{s}'\n", .{current_arg});
             return error.UnexpectedArgument;
         }
-        
-               
-        // some safety checks
-        // if (has_flags and parsed_flags > definition.flags.len) {
-        //     try stderr.print("Error: Incorrect number of flags detected. Should be at most {d} but are {d}", .{definition.flags.len, parsed_flags});
-        //     return error.InvalidFlags;
-        // }
-        //
-        // if (has_options and parsed_options > definition.options.len) {
-        //     try stderr.print("Error: Incorrect number of options detected. Should at most {d} but are {d}", .{definition.options.len, parsed_options});
-        //     return error.InvalidOptions;
-        // }
-
-        if (has_required and parsed_required != definition.required.len) {
-            try stderr.print("Error: Incorrect number of required arguments detected. Should be {d} but are {d}.", .{definition.required.len, parsed_required});
-            return error.UnexpertedArgument;
-        }
-
-        if (has_commands) {
-            try stderr.writeAll("Error: .command found at same level as .required.\n");
-        }
     }
     
+    if (is_args_empty) {
+        try parse.printUsage(definition, stdout);
+        return error.HelpShown;
+    }
+    // safety checks
+    if (has_required and parsed_required != definition.required.len) {
+        try stderr.print("Error: Incorrect number of required arguments detected. Should be {d} but are {d}.", .{definition.required.len, parsed_required});
+        return error.UnexpertedArgument;
+    }
+
+    if (has_commands) {
+        try stderr.writeAll("Error: .command found at same level as .required.\n");
+        return error.InvalidDefinition;
+    }
+
     return result;
 }
 

@@ -214,8 +214,7 @@ pub fn parseArgsRecursive(comptime definition: anytype, args: []const[]const u8,
             
             
     // some safety checks
-    if (has_flags and parsed_flags > definition.flags.len) {
-        try stderr.print("Error: Incorrect number of flags detected. Should be at most {d} but are {d}", .{definition.flags.len, parsed_flags});
+    if (has_flags and parsed_flags > definition.flags.len) { try stderr.print("Error: Incorrect number of flags detected. Should be at most {d} but are {d}", .{definition.flags.len, parsed_flags});
         return error.InvalidFlags;
     }
     
@@ -226,7 +225,7 @@ pub fn parseArgsRecursive(comptime definition: anytype, args: []const[]const u8,
 
     if (@hasField(Definition, "required") and parsed_required != definition.required.len) {
         try stderr.print("Error: Incorrect number of required arguments detected. Should be {d} but are {d}.", .{definition.required.len, parsed_required});
-        return error.UnexpertedArgument;
+        return error.MissingRequired;
     }
     
     // last parse should not have a command

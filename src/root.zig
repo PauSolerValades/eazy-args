@@ -56,12 +56,6 @@ pub fn parseArgsPosix(comptime definition: anytype, args: *Args.Iterator, stdout
     
     _ = args.skip(); // skip the program name
 
-    if (!args.skip()) {
-        try parse.printUsage(definition, stdout);
-        return error.HelpShown;
-    }
-
-    
     return posix.parseArgsPosixRecursive(definition, args, stdout, stderr);
 }
 
@@ -83,7 +77,7 @@ test "Normal parsing: required, flags, options" {
         .flags = .{ Flag("verbose", "v", "Enable verbose output") },
         .options = .{ Opt([]const u8, "mode", "m", "default", "Operation mode") },
     };
-    
+    // GNU "pgm 42 -v --mode fast" 
     {
         const args = &[_][]const u8{ "pgm", "42", "-v", "--mode", "fast" };
         const result = try parseArgs(ta, def, args, nullout, nullout);
@@ -92,24 +86,15 @@ test "Normal parsing: required, flags, options" {
         try testing.expectEqual(true, result.verbose);
         try testing.expectEqualStrings("fast", result.mode);
     }
-}
+    // GNU "pgm -v 42 --mode fast"
+    {
+        const args = &[_][]const u8{ "pgm", "-v", "42", "--mode", "fast" };
+        const result = try parseArgs(ta, def, args, nullout, nullout);
 
-test "alone" {
-    const def = .{
-        .required = .{ Arg(u32, "count", "The number of items") },
-        .flags = .{ Flag("verbose", "v", "Enable verbose output") },
-        .options = .{ Opt([]const u8, "mode", "m", "default", "Operation mode") },
-    };
-
-    const fake_argv = &[_][*:0]const u8{ "utility", "-v", "-p", "diablo", "500"};
-    const args = Args{ .vector = fake_argv };
-    var iter = Args.Iterator.init(args);
-    
-    const result = try parseArgsPosix(def, &iter, nullout, nullout);
-
-    try testing.expectEqual(@as(u32, 500), result.count);
-    try testing.expectEqual(true, result.verbose);
-    try testing.expectEqualStrings("diablo", result.mode);
+        try testing.expectEqual(@as(u32, 42), result.count);
+        try testing.expectEqual(true, result.verbose);
+        try testing.expectEqualStrings("fast", result.mode);
+    }
 }
 
 test "Normal parsing: 2 args, 2 flags, 2 options" {
@@ -195,7 +180,7 @@ test "Normal parsing: 2 args, 2 flags, 2 options" {
         };
 
 
-        try testing.expectError(error.UnexpertedArgument, parseArgs(ta, def, args, nullout, nullout));
+        try testing.expectError(error.MissingRequired, parseArgs(ta, def, args, nullout, nullout));
     }
     // NO REQUIREDS "pgm -v -d --mode fast -- threshold 25"
     {
@@ -207,11 +192,12 @@ test "Normal parsing: 2 args, 2 flags, 2 options" {
             "--threshold", "25",
         };
 
-        try testing.expectError(error.UnexpertedArgument, parseArgs(ta, def, args, nullout, nullout));
+        try testing.expectError(error.MissingRequired, parseArgs(ta, def, args, nullout, nullout));
     }
 }
 
-test "Parsing optional with ?type (Tally Example)" {
+
+test "Parsing optional with ?type" {
     const entry_start = .{
         .required = .{ Arg([]const u8, "description", "What are you doing now?") },
         // Corrected: Name "projectid", Short "p"
@@ -258,6 +244,7 @@ test "Parsing optional with ?type (Tally Example)" {
         try testing.expect(start_cmd.projectid == null);
     }
 }
+
 test "Two subcommands with shared definition" {
     const subdef = .{
         .required = .{ Arg(u32, "id", "Resource ID") },
@@ -397,4 +384,194 @@ test "Mixed assignment styles (= vs space)" {
     try testing.expectEqualStrings("fast", result.mode);
     try testing.expectEqual(@as(u32, 5), result.count);
     try testing.expectEqual(true, result.verbose);
+}
+
+
+test {
+    _ = @import("validation.zig");
+    _ = @import("parse.zig");
+}
+
+test "POSIX: Normal parsing (Flags, Options, Required)" {
+    const def = .{
+        .required = .{ Arg(u32, "count", "The number of items") },
+        .flags = .{ Flag("verbose", "v", "Enable verbose output") },
+        .options = .{ Opt([]const u8, "mode", "m", "default", "Operation mode") },
+    };
+
+    // "pgm -v -m fast 42"
+    {
+        const fake_argv = &[_][*:0]const u8{ "pgm", "-v", "-m", "fast", "42"};
+        const args = Args{ .vector = fake_argv }; 
+        var iter = Args.Iterator.init(args);
+
+        const result = try parseArgsPosix(def, &iter, nullout, nullout);
+        
+        try testing.expectEqual(@as(u32, 42), result.count);
+        try testing.expectEqual(true, result.verbose);
+        try testing.expectEqualStrings("fast", result.mode);
+    }
+    // "pgm --mode fast -v 42"
+    {
+        const fake_argv = &[_][*:0]const u8{ "pgm", "--mode", "fast", "-v", "42"};
+        const args = Args{ .vector = fake_argv }; 
+        var iter = Args.Iterator.init(args);
+
+        const result = try parseArgsPosix(def, &iter, nullout, nullout);
+        
+        try testing.expectEqual(@as(u32, 42), result.count);
+        try testing.expectEqual(true, result.verbose);
+        try testing.expectEqualStrings("fast", result.mode);
+    }
+    // "pgm 42 -v"
+    {
+        const fake_argv = &[_][*:0]const u8{ "pgm", "42", "-v"};
+        const args = Args{ .vector = fake_argv }; 
+        var iter = Args.Iterator.init(args);
+
+        // and then fail when it sees '-v'
+        try testing.expectError(error.InvalidPosix, parseArgsPosix(def, &iter, nullout, nullout));
+    }
+    // "pgm 42 --mode fast"
+    {
+        const fake_argv = &[_][*:0]const u8{ "pgm", "42", "--mode", "fast"};
+        const args = Args{ .vector = fake_argv }; 
+        var iter = Args.Iterator.init(args);
+
+        try testing.expectError(error.InvalidPosix, parseArgsPosix(def, &iter, nullout, nullout));
+    }
+}
+
+test "POSIX: invalid '='" {
+    const def = .{
+        .required = .{ Arg(u32, "id", "ID") },
+        .options = .{ Opt([]const u8, "mode", "m", "default", "Mode") },
+    };
+    // "pgm --mode=fast 123"
+    {
+        const fake_argv = &[_][*:0]const u8{ "pgm", "--mode=fast", "123" };
+        const args = Args{ .vector = fake_argv }; 
+        var iter = Args.Iterator.init(args);
+
+        try testing.expectError(error.InvalidPosix, parseArgsPosix(def, &iter, nullout, nullout));
+    }
+}
+
+test "POSIX: Subcommands" {
+    const subdef = .{
+        .required = .{ Arg(u32, "id", "Resource ID") },
+        .flags = .{ Flag("force", "f", "Force operation") },
+        .options = .{ Opt(u32, "retry", "r", 1, "Number of retries") },
+    };
+
+    const def = .{
+        .commands = .{
+            .delete = subdef,
+            .update = subdef,
+        },
+    };
+
+    // "pgm delete -f 100" (Flag before ID)
+    {
+        const fake_argv = &[_][*:0]const u8{ "pgm", "delete", "-f", "100" };
+        const args = Args{ .vector = fake_argv }; 
+        var iter = Args.Iterator.init(args);
+
+        const result = try parseArgsPosix(def, &iter, nullout, nullout);
+
+        try testing.expect(result.cmd == .delete); 
+        try testing.expectEqual(@as(u32, 100), result.cmd.delete.id);
+        try testing.expectEqual(true, result.cmd.delete.force);
+    }
+
+    // FAIL: "pgm delete 100 -f" (Flag after ID)
+    {
+        const fake_argv = &[_][*:0]const u8{ "pgm", "delete", "100", "-f" };
+        const args = Args{ .vector = fake_argv }; 
+        var iter = Args.Iterator.init(args);
+
+        // Error happens inside the subcommand parser recursion
+        try testing.expectError(error.InvalidPosix, parseArgsPosix(def, &iter, nullout, nullout));
+    }
+}
+
+test "POSIX: Multi-level Commands and Globals" {
+    // Structure: pgm [global_flags] [command] [cmd_flags] [required]
+    const def = .{
+        .commands = .{
+            .commit = .{
+                .required = .{ Arg([]const u8, "msg", "Commit message") },
+                .flags = .{ Flag("amend", "a", "Amend previous commit") },
+            },
+        },
+        .flags = .{ Flag("git-dir", "g", "Use custom git dir") },
+        .options = .{ Opt([]const u8, "user", "u", "admin", "User name") },
+    };
+    // "pgm -g commit --amend 'fix bug'"
+    {
+        const fake_argv = &[_][*:0]const u8{ "pgm", "-g", "commit", "--amend", "fix bug" };
+        const args = Args{ .vector = fake_argv }; 
+        var iter = Args.Iterator.init(args);
+
+        const result = try parseArgsPosix(def, &iter, nullout, nullout);
+
+        // Check Global
+        try testing.expectEqual(true, result.@"git-dir");
+        try testing.expect(result.cmd == .commit);
+        
+        // Check Command Specific
+        try testing.expectEqual(true, result.cmd.commit.amend);
+        try testing.expectEqualStrings("fix bug", result.cmd.commit.msg);
+    }
+    
+    // FAIL: Global flag placed INSIDE subcommand
+    // "pgm commit -g 'fix bug'"
+    {
+        const fake_argv = &[_][*:0]const u8{ "pgm", "commit", "-g", "fix bug" };
+        const args = Args{ .vector = fake_argv }; 
+        var iter = Args.Iterator.init(args);
+
+        // The subcommand 'commit' does NOT know about '-g'. 
+        // It will try to parse '-g' as the required 'msg' (if type matches) or fail flags check.
+        // Since 'msg' is a string, it might actually parse "-g" as the message!
+        // Let's check what happens:
+        const result = parseArgsPosix(def, &iter, nullout, nullout);
+        
+        try testing.expectError(error.InvalidPosix, result);
+        // It successfully parses, but the logic is wrong from a user perspective.
+        // The commit message becomes "-g".
+        // try testing.expectEqualStrings("-g", result.cmd.commit.msg);
+    }
+}
+
+test "POSIX: Help Detection" {
+    const def = .{ .required = .{ Arg(u32, "num", "A number") } };
+    // "-h"
+    {
+        const fake_argv = &[_][*:0]const u8{ "pgm", "-h" };
+        const args = Args{ .vector = fake_argv }; 
+        var iter = Args.Iterator.init(args);
+        try testing.expectError(error.HelpShown, parseArgsPosix(def, &iter, nullout, nullout));
+    }
+    // "--help"
+    {
+        const fake_argv = &[_][*:0]const u8{ "pgm", "--help" };
+        const args = Args{ .vector = fake_argv }; 
+        var iter = Args.Iterator.init(args);
+        try testing.expectError(error.HelpShown, parseArgsPosix(def, &iter, nullout, nullout));
+    }
+    {
+        const fake_argv = &[_][*:0]const u8{ "pgm", "help" };
+        const args = Args{ .vector = fake_argv }; 
+        var iter = Args.Iterator.init(args);
+        try testing.expectError(error.HelpShown, parseArgsPosix(def, &iter, nullout, nullout));
+    }
+    // Empty args (Help shown because required arg missing)
+    {
+        const fake_argv = &[_][*:0]const u8{ "pgm" };
+        const args = Args{ .vector = fake_argv }; 
+        var iter = Args.Iterator.init(args);
+        // This fails at the END of validation because 'num' is missing
+        try testing.expectError(error.HelpShown, parseArgsPosix(def, &iter, nullout, nullout));
+    }
 }

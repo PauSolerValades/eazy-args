@@ -22,7 +22,8 @@ pub fn build(b: *std.Build) void {
     });
     
     const examples_step = b.step("examples", "Compile the examples in \"examples\" folder");
-    
+   
+    // TODO: just make this return a list of filenames
     const examples = [_][]const u8{
         "bus_simulation",
         "simple_example",
@@ -83,3 +84,4 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_exe_tests.step);
 
 }
+
