@@ -29,7 +29,7 @@ pub const ParseErrors = parse.ParseErrors;
 pub fn parseArgs(gpa: Allocator, comptime definition: anytype, args: []const []const u8, stdout: *Io.Writer, stderr: *Io.Writer) !Reify(definition) {
    
     // this will throw a compile error if definition is not valid
-    validation.validateDefinition(definition);
+    validation.validateDefinition(definition, 0);
    
     // if the user passes just the program name
     if (args.len == 1) {
@@ -52,7 +52,7 @@ pub fn parseArgs(gpa: Allocator, comptime definition: anytype, args: []const []c
 /// This also allows us to use an Args.Iterator with no dynamic memory (not in Windows tho)
 pub fn parseArgsPosix(comptime definition: anytype, args: *Args.Iterator, stdout: *Io.Writer, stderr: *Io.Writer) anyerror!Reify(definition) {
     
-    validation.validateDefinition(definition);
+    validation.validateDefinition(definition, 0);
     
     _ = args.skip(); // skip the program name
 

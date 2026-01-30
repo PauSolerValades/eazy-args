@@ -49,9 +49,16 @@ pub fn parseValue(comptime T: type, str: []const u8) !T {
 }
 
 pub fn printUsage(comptime definition: anytype, writer: *Io.Writer) !void {
-    _ = definition;
-    try writer.writeAll("This is the usage that I will definetly do xd\n");
-    return;
+    try writer.writeAll("Usage: app");
+
+    if (@hasField(definition, "options") or @hasField(definition, "flags")) {
+        try writer.writeAll(" [options]");
+    }
+
+    inline for (definition.requried) |arg| {
+        try writer.print(" <{s}>", .{arg.field_name});
+    }  
+
 }
 
 fn OldPrintUsage(comptime definition: anytype, writer: *Io.Writer) !void {
