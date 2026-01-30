@@ -60,7 +60,7 @@ const gnuargs = argz.parseArgs(init.gpa, definition, args, stdout, stderr) catch
 
 ## Features
 
-The function seen in the previous example, `parseArgs`, implements the GNU [Program Argument Syntax Conventions](https://sourceware.org/glibc/manual/latest/html_mono/libc.html#Program-Arguments): any argument can be in provided at any point, that is `utility 100 "Pau" -b 100 -s 0.5 -v -o` and any permutation of those - e.g. `utility -b 20 100 -v -o "Pau" -s 0.5`, despite being super bizarre - will be properly parsed. If also supports providing and option as `--break=100` using the `=` instead of the space.
+The function seen in the previous example, `parseArgs`, implements the GNU [Program Argument Syntax Conventions](https://pubs.opengroup.org/onlinepubs/9799919799/): any argument can be in provided at any point, that is `utility 100 "Pau" -b 100 -s 0.5 -v -o` and any permutation of those - e.g. `utility -b 20 100 -v -o "Pau" -s 0.5`, despite being super bizarre - will be properly parsed. If also supports providing and option as `--break=100` using the `=` instead of the space.
 
 EazyArgs also provides a POSIX compliant with the [Utility Argument Syntax](https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap12.html) parse function, `parseArgsPosix` like the following code.
 
