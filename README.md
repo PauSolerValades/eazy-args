@@ -11,7 +11,7 @@ EazyArgs leverages type [reification](https://en.wikipedia.org/wiki/Reification_
 Features:
 + **Simple, No Boilerplate**: Define your arguments once. The library generates the types, the validation, and the parser automatically.
 + **Categorical & Nested**: cleanly separate Flags, Options, and Positional arguments. Nest commands as deep as you need (e.g., git remote add origin).
-+ [TODO] **Help Generation**: Usage strings are automatically generated from your definitions.
++ **Help Generation**: Usage strings are automatically generated from your definitions.
 + **Versatility**: Provides both a GNU and POSIX compliant argument parsing.
 + **Compile-time Specialized**: The validation happens at compile-time. The parser uses `inline` loops, meaning the resulting machine code is optimized specifically for your definition—no generic runtime overhead.
 
@@ -87,7 +87,7 @@ The POSIX implementation has three main advantages directly related to the stric
 + No arg slice: the function accepts a `*std.process.Args.Iterator` instead of an slice. This will require an allocator in Windows `var iter = init.minimal.args.iterateAllocator(allocator)`.
 + Efficiency: it's exactly $O(n)$ complexity, where n is the number of element in the *Args.Iterator. `parseArgs` requires three full sweeps over the original list for every different command and subcommands of that (it grows to the cube).
 
-At the end of the README there is a section regarding fully compliance with POSIX standards, which features are supported and not.
+At the end of the README there is a section regarding fully compliance with POSIX standards. **WARNING**: at this time, not ALL functionality for POSIX is implemented, as well as the help string, which does not work! At the end of the document this is discussed more in depth.
 
 ## Command example
 _[See `examples/database.zig`]_
