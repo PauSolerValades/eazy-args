@@ -197,7 +197,6 @@ To allow for multiple nesting within commands the following rules will be enforc
 3. `flags` and `options` are optional, and can or can't appear.
 
 Once parsed, it can be accessed with nested switch statements:
-```
 
 ```zig
     const args = try init.minimal.args.toslice(init.gpa);
@@ -262,24 +261,31 @@ You cannot declare a positional argument called `help` nor a optional/flag calle
 
 ## API Reference
 
-Arg (Positional)
+Argument - Positional arguments, allowed inside the `.required` tag
 + Type: The Zig type to parse (e.g., u32, []const u8, bool).
 + Name: The field name in the struct.
 + Description: Help text displayed in usage.
 
-OptArg (Optional Option)
+Option - Option with default value, allowed inside the `.option` tag 
 + Type: The value type. 
 + Name: Long flag name (e.g., "port" → --port).
 + Short: Short flag alias (e.g., "p" → -p).
 + Default: The value used if the flag is omitted (Must match Type).
 + Description: Help text.
 
-Flag (Boolean Switch)
+Flag - Boolean option, needs no speficiation, defaults to `false`. Allowed inside the `.flags` tag
 + Name: Long flag name.
 + Short: Short flag alias.
 + Description: Help text.
 
-Note: Flags are always bool and default to false.
+ParseErrors - Errors returned by the parse functions
+- HelpShown
+- MissingArgument
+- InvalidOptions
+- InvalidFlags
+- UnexpectedArgument
+- UknownArgument
+- MissingValue
 
 ## About _strict_ POSIX compliance
 
