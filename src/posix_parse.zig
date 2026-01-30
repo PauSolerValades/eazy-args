@@ -56,7 +56,7 @@ pub fn parseArgsPosixRecursive(comptime definition: anytype, args: *Args.Iterato
         is_args_empty = false;
 
         if (std.mem.eql(u8, current_arg, "-h") or std.mem.eql(u8, current_arg, "--help") or std.mem.eql(u8, current_arg, "help")) {
-            try parse.printUsage(definition, stdout);
+            try parse.oldPrintUsage(definition, stdout);
             return error.HelpShown;
         }
        
@@ -174,7 +174,7 @@ pub fn parseArgsPosixRecursive(comptime definition: anytype, args: *Args.Iterato
     }
     
     if (is_args_empty) {
-        try parse.printUsage(definition, stdout);
+        try parse.oldPrintUsage(definition, stdout);
         return error.HelpShown;
     }
     // safety checks

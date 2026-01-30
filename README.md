@@ -244,20 +244,95 @@ Once parsed, it can be accessed with nested switch statements:
 Use `help` as a first argument to print the help string:
 
 ```
-$: ./program help
-Usage: app [options] <limit> <username>
-
-Positional Arguments:
-  limit        (u32): Limits are meant to be broken
-  username     ([]const u8): who are you dear?
+./gitu help
+Gitu - A simple git for example purposes.
+Usage: gitu [options] [commands]
 
 Options:
-  -b, --break        <u32>: Stop before the limit (default: 100)
-  -v, --verbose            : Print a little, print a lot
+  -v, --verbose         Enable verbose logging
+  -c, --config          Path to config file
+
+Commands:
+  init                  Creates a new repository
+  commit                Commits changes
+  remote                Interacts with the server (remote)
+    add                   Add a new remote                                                                                                                                      show                  Show current remote
+```
+
+The descriptions in the help message must be specified in the definition, if not will be left empty; `.name` will appear in the usage, and `.description` describes every command or subcommand. The above message was generated from the following definition:
+
+```
+const gitu_definition = .{
+    // what's your programs name and what does it do
+    .name = "gitu",
+    .description = "Gitu - A simple git for example purposes.",
+    
+    // set global arguments for the whole program
+    .flags = .{ Flag("verbose", "v", "Enable verbose logging") },
+    .options = .{ Opt([]const u8, "config", "c", "~/.gituconfig", "Path to config file") },
+
+    .commands = .{
+        .init = .{ // simple command with 1 positional argument
+            .required = .{ Arg([]const u8, "path", "Where to create the repository") },
+            .flags = .{ Flag("bare", "b", "Create a bare repository") },
+            .description = "Creates a new repository",
+        },
+        .commit = .{ // just options and flags
+            .options = .{ Opt([]const u8, "message", "m", "Default Message", "Commit message") },
+            .flags = .{ Flag("amend", "a", "Amend the previous commit") },
+            .description = "Commits changes"
+        },
+        .remote = .{ 
+            .commands = .{ // nested subcommands !
+                .add = .{
+                    .required = .{  // multiple required args // gitu remote add <name> <url>
+                        Arg([]const u8, "name", "Remote name (e.g. origin)"),
+                        Arg([]const u8, "url", "Remote URL"),
+                    },
+                    .options = .{ Opt([]const u8, "track", "t", "master", "Branch to track") },
+                    .description = "Add a new remote",
+                },
+                .show = .{
+                    .required = .{ Arg([]const u8, "name", "Remote name to inspect") },
+                    .description = "Show current remote"
+                },
+            },
+            .description = "Interacts with the server (remote)",
+        },
+    },
+};
+```
+
+The help message will change accordingly to which arguments/commands the user has written if the help flag `-h,--help` is invoked.
+
+```
+$: ./gitu init -h
+Usage: eazy_args init [options] <path>
+
+Description: Creates a new repository
+
+Options:
+  -b, --bare            Create a bare repository
+
+Arguments:
+  path            Where to create the repository
 ```
 
 
-You cannot declare a positional argument called `help` nor a optional/flag called `--help` or `-h`, those are reserved and will throw a compile time error.
+When invoked in nesting commands, help messages will also change according to which commands can appear:
+
+```
+$: ./gitu remote --help
+Usage: eazy_args remote [commands]
+
+Description: Interacts with the server (remote)
+
+Commands:
+  add                   Add a new remote
+  show                  Show current remote
+```
+
+You cannot declare a command called `help` nor a optional/flag called `--help` or `-h`, those are reserved and will throw a compile error.
 
 ## API Reference
 
@@ -313,3 +388,9 @@ const def = .{
 But I have to think about it.
 
 Lastly, POSIX does not allow a double representation of the same flag `-v/--verbose` so the `parseArgsPosix` should not allow it. I have mixed feelings about this: removing it would be the "correct" thing to make exactly POSIX but i feel long/short options and flags are super standard nowadays, so I really wonder if levaing the option and if you want an exactly posix compilant just don't use it is maybe the most user friendly approach?
+
+# TODO:
++ Fix spacing in `printUsage`. Probably i will have to compute the min identation per every subcommand
++ Add a small usage when not all commands have been provided. That is, `tally entry start` now says `Error: Incorrect number of required arguments detected. Should be 1 but are 0.` which is techincally correct, but the user expects to see `Usage: tally entry start --projectid <description> `
++ Implement `printUsage` for POSIX: as i was already using an allocator in GNU style, i did not care that to know the path i had to use one. In POSIX no allocator is needed, i have to really think about what I want.
++

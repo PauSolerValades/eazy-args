@@ -33,7 +33,7 @@ pub fn parseArgs(gpa: Allocator, comptime definition: anytype, args: []const []c
    
     // if the user passes just the program name
     if (args.len == 1) {
-        try parse.printUsage(definition, stdout);
+        try parse.printUsage(definition, stdout, args[0]);
         return error.HelpShown;
     }
     const consumed = try gpa.alloc(bool, args.len);
@@ -41,8 +41,10 @@ pub fn parseArgs(gpa: Allocator, comptime definition: anytype, args: []const []c
     @memset(consumed, false);
     consumed[0] = true;
 
+    const exename = std.fs.path.basename(args[0]);
+
     // call the recursive version to adapt it
-    return gnu.parseArgsRecursive(definition, args, consumed, stdout, stderr);
+    return gnu.parseArgsRecursive(gpa, definition, args, consumed, exename, stdout, stderr);
 }
 
 /// POSIX compliant argument parsing (https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap12.html)

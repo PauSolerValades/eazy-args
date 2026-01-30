@@ -16,16 +16,17 @@ const parseErrors = parse.ParseErrors;
 /// 3. All the required arguments must one after the other (eg ./prgm cmd1 r1, ..., rn, -f1,...,-fm, -o1, ..., -on). The order of required, flags, opt 
 ///     can be interchangable, and opt/flags can be mixed toghether
 /// 4. No flags nor options can be between commands. If a flag/option is specific of a subcommand, add it before the last command.
-pub fn parseArgsRecursive(comptime definition: anytype, args: []const[]const u8, consumed: []bool, stdout: *Io.Writer, stderr: *Io.Writer) anyerror!Reify(definition){
+pub fn parseArgsRecursive(
+    gpa: Allocator,
+    comptime definition: anytype, 
+    args: []const[]const u8, 
+    consumed: []bool,
+    path: []const u8,
+    stdout: *Io.Writer, 
+    stderr: *Io.Writer
+    ) anyerror!Reify(definition){
    
-    // if some element is help -h or --help just print help
-    for (args, 0..) |arg, i| {
-        if (!consumed[i] and (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "help"))) {
-            try parse.printUsage(definition, stdout);
-            return error.HelpShown;
-        }
-    }
-       
+           
     // create the reificated struct, empty and ready to fill 
     const ReArgs: type = Reify(definition);
     var result: ReArgs = undefined;
@@ -163,8 +164,13 @@ pub fn parseArgsRecursive(comptime definition: anytype, args: []const[]const u8,
                     inline else => |tag| {
                         const name: []const u8 = @tagName(tag); // converts the enum into a string
                         const def_subcmd = @field(definition.commands, name);
+                        
+                        // create the path for the printUsage                        
+                        const new_path = try std.fmt.allocPrint(gpa, "{s} {s}", .{path, name});
+                        defer gpa.free(new_path);
+                       
                         // we know this is a valid command, so we recursively parse the Args 
-                        const parsedCmd = try parseArgsRecursive(def_subcmd, args, consumed, stdout, stderr);
+                        const parsedCmd = try parseArgsRecursive(gpa, def_subcmd, args, consumed, new_path, stdout, stderr);
                         result.cmd = @unionInit(CommandUnion, name, parsedCmd);              
 
                         return result;
@@ -173,6 +179,14 @@ pub fn parseArgsRecursive(comptime definition: anytype, args: []const[]const u8,
             }
         }
         
+    }
+     
+    // if this is not here, the printUsage will never adapt to the callee level
+    for (args, 0..) |arg, k| {
+        if (!consumed[k] and (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "help"))) {
+            try parse.printUsage(definition, stdout, path);
+            return error.HelpShown;
+        }
     }
 
     i = 0;
@@ -205,11 +219,11 @@ pub fn parseArgsRecursive(comptime definition: anytype, args: []const[]const u8,
                     break;
                 }
             }
-        } else {
-            try stderr.writeAll("Error: catastrofic failure of the validation function. Cry.\n");
-            return error.CatastroficStructure;
         }
-
+        // } else {
+        //     try stderr.writeAll("Error: catastrofic failure of the validation function. Cry.\n");
+        //     return error.CatastroficStructure;
+        // }
     }
             
             

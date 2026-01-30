@@ -104,7 +104,7 @@ fn validateSubfield(comptime definition: anytype, comptime kind: ArgKind) void {
 
 }
 
-fn isString(comptime param: anytype) bool {
+fn isStringLiteral(comptime param: anytype) bool {
     const T = @TypeOf(param);
     const info = @typeInfo(T);
 
