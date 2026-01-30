@@ -199,48 +199,49 @@ To allow for multiple nesting within commands the following rules will be enforc
 Once parsed, it can be accessed with nested switch statements:
 
 ```zig
-    const args = try init.minimal.args.toslice(init.gpa);
-    defer init.gpa.free(args);
-    const arguments = argz.parseargs(init.gpa, def, args, stdout, stderr) catch |err| {
-        switch (err) {
-            parseerrors.helpshown => try stdout.flush(),
-            else => try stderr.flush(),
-        }
-        std.process.exit(0);
-    };
-    
-    // access it with a switch, clean and easy (args haha)
-    switch (arguments.cmd) {
-        .entry => |entry_cmd| {
-            switch (entry_cmd.cmd) {
-                .start => |start_args| {
-                    try stdout.print("'entry start' detected!\n", .{});
-                    if (start_args.projectid) |pid| {
-                        try stdout.print("detected pid: {d}\n", .{pid});
-                    } else {
-                        try stdout.writeall("no pid detected\n");
-                    }
-                },
-                .stop => try stdout.writeall("'entry stop' detected!\n"),
-                .status => try stdout.writeall("'entry status' detected!\n"),
-            }
-        },
-        .project => |project_cmd| {
-            switch (project_cmd.cmd) {
-                .create => |create_args| {
-                     try stdout.print("creating project: {s}\n", .{create_args.description});
-                },
-                .rename => |rename_args| {
-                     try stdout.print("renaming id {d} to {s}\n", .{rename_args.projectid, rename_args.name});
-                }
-            } 
-        }
+const args = try init.minimal.args.toslice(init.gpa);
+defer init.gpa.free(args);
+const arguments = argz.parseargs(init.gpa, def, args, stdout, stderr) catch |err| {
+    switch (err) {
+        parseerrors.helpshown => try stdout.flush(),
+        else => try stderr.flush(),
     }
+    std.process.exit(0);
+};
+
+// access it with a switch, clean and easy (args haha)
+switch (arguments.cmd) {
+    .entry => |entry_cmd| {
+        switch (entry_cmd.cmd) {
+            .start => |start_args| {
+                try stdout.print("'entry start' detected!\n", .{});
+                if (start_args.projectid) |pid| {
+                    try stdout.print("detected pid: {d}\n", .{pid});
+                } else {
+                    try stdout.writeall("no pid detected\n");
+                }
+            },
+            .stop => try stdout.writeall("'entry stop' detected!\n"),
+            .status => try stdout.writeall("'entry status' detected!\n"),
+        }
+    },
+    .project => |project_cmd| {
+        switch (project_cmd.cmd) {
+            .create => |create_args| {
+                  try stdout.print("creating project: {s}\n", .{create_args.description});
+            },
+            .rename => |rename_args| {
+                  try stdout.print("renaming id {d} to {s}\n", .{rename_args.projectid, rename_args.name});
+            }
+        } 
+    }
+}
 ```
 
 
 ## Help String
-[TODO: make it hehe]
+_[See src/main.zig]_
+
 Use `help` as a first argument to print the help string:
 
 ```
@@ -256,7 +257,8 @@ Commands:
   init                  Creates a new repository
   commit                Commits changes
   remote                Interacts with the server (remote)
-    add                   Add a new remote                                                                                                                                      show                  Show current remote
+    add                   Add a new remote
+    show                  Show current remote
 ```
 
 The descriptions in the help message must be specified in the definition, if not will be left empty; `.name` will appear in the usage, and `.description` describes every command or subcommand. The above message was generated from the following definition:
@@ -392,5 +394,5 @@ Lastly, POSIX does not allow a double representation of the same flag `-v/--verb
 # TODO:
 + Fix spacing in `printUsage`. Probably i will have to compute the min identation per every subcommand
 + Add a small usage when not all commands have been provided. That is, `tally entry start` now says `Error: Incorrect number of required arguments detected. Should be 1 but are 0.` which is techincally correct, but the user expects to see `Usage: tally entry start --projectid <description> `
-+ Implement `printUsage` for POSIX: as i was already using an allocator in GNU style, i did not care that to know the path i had to use one. In POSIX no allocator is needed, i have to really think about what I want.
-+
++ Implement `printUsage` for POSIX: as i was already using an allocator in GNU style, i did not care that to know the path i had to use one. In POSIX no allocator is needed, i have to really think about what should I do. I don't think the path is going to disappear from the printUsage, so I'll probably use a generous buffer (512?)
++ POSIX functionalities: Described at the above section.
