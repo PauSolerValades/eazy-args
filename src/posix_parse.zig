@@ -179,7 +179,7 @@ pub fn parseArgsPosixRecursive(comptime definition: anytype, args: *Args.Iterato
     }
     // safety checks
     if (has_required and parsed_required != definition.required.len) {
-        try stderr.print("Error: Incorrect number of required arguments detected. Should be {d} but are {d}.", .{definition.required.len, parsed_required});
+        try stderr.print("Error: Incorrect number of required arguments detected. Should be {d} but are {d}.\n", .{definition.required.len, parsed_required});
         return error.UnexpertedArgument;
     }
 

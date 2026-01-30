@@ -206,7 +206,7 @@ pub fn parseArgsRecursive(comptime definition: anytype, args: []const[]const u8,
                 }
             }
         } else {
-            try stderr.writeAll("Error: catastrofic failure of the validation function. Cry.");
+            try stderr.writeAll("Error: catastrofic failure of the validation function. Cry.\n");
             return error.CatastroficStructure;
         }
 
@@ -214,17 +214,17 @@ pub fn parseArgsRecursive(comptime definition: anytype, args: []const[]const u8,
             
             
     // some safety checks
-    if (has_flags and parsed_flags > definition.flags.len) { try stderr.print("Error: Incorrect number of flags detected. Should be at most {d} but are {d}", .{definition.flags.len, parsed_flags});
+    if (has_flags and parsed_flags > definition.flags.len) { try stderr.print("Error: Incorrect number of flags detected. Should be at most {d} but are {d}\n", .{definition.flags.len, parsed_flags});
         return error.InvalidFlags;
     }
     
     if (has_options and parsed_options > definition.options.len) {
-        try stderr.print("Error: Incorrect number of options detected. Should at most {d} but are {d}", .{definition.options.len, parsed_options});
+        try stderr.print("Error: Incorrect number of options detected. Should at most {d} but are {d}\n", .{definition.options.len, parsed_options});
         return error.InvalidOptions;
     }
 
     if (@hasField(Definition, "required") and parsed_required != definition.required.len) {
-        try stderr.print("Error: Incorrect number of required arguments detected. Should be {d} but are {d}.", .{definition.required.len, parsed_required});
+        try stderr.print("Error: Incorrect number of required arguments detected. Should be {d} but are {d}.\n", .{definition.required.len, parsed_required});
         return error.MissingRequired;
     }
     
