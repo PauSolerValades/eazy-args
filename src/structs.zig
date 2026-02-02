@@ -20,6 +20,8 @@ pub fn Option(comptime T: type, comptime name: [:0]const u8, comptime short: [:0
     if (name[0] == '-') @compileError("Long name '" ++ name ++ "' must not start with '-'.");
     if (short[0] == '-') @compileError("Short name '" ++ short ++ "' must not start with '-'.");    
     
+    if (short.len == 2) @compileError("Invalid option '{s}'. Must be just one char.");
+
     validateReservedKeywords(name, short);
 
     return struct {
@@ -36,6 +38,8 @@ pub fn Flag(comptime name: [:0]const u8, comptime short: [:0]const u8, comptime 
     // validate both name and short do NOT start with -- and - respectively
     if (name[0] == '-') @compileError("Long name '" ++ name ++ "' must not start with '-'.");
     if (short[0] == '-') @compileError("Short name '" ++ short ++ "' must not start with '-'.");    
+    
+    if (short.len == 2) @compileError("Invalid flag '{s}'. Must be just one char.");
     
     validateReservedKeywords(name, short);
 
