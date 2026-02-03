@@ -599,6 +599,82 @@ test "POSIX: mixed flags" {
         try testing.expectEqual(true, result.time);
 
     }
+    {
+        const fake_argv = &[_][*:0]const u8{ "pgm", "-aA" };
+        const args = Args{ .vector = fake_argv }; 
+        var iter = Args.Iterator.init(args);
+        
+        const result = try parseArgsPosix(def, &iter, nullout, nullout);
+        
+        try testing.expectEqual(true, result.all);
+        try testing.expectEqual(true, result.almostall);
+        try testing.expectEqual(false, result.list);
+        try testing.expectEqual(false, result.time);
+    }
 
-    
+    {
+        const fake_argv = &[_][*:0]const u8{ "pgm", "-A" };
+        const args = Args{ .vector = fake_argv }; 
+        var iter = Args.Iterator.init(args);
+        
+        const result = try parseArgsPosix(def, &iter, nullout, nullout);
+        
+        try testing.expectEqual(false, result.all);
+        try testing.expectEqual(true, result.almostall);
+        try testing.expectEqual(false, result.list);
+        try testing.expectEqual(false, result.time);
+    }
+}
+
+test "POSIX: mixed attached and separated options" {
+    const def = .{ 
+        .options = .{ 
+            Opt(u64, "port", "p", 8080, "Port"), 
+            Opt([]const u8, "ip", "i", "127.0.0.1", "IP address") // Added a default
+        },
+    };
+
+    {
+        const fake_argv = &[_][*:0]const u8{ "pgm", "-ilocalhost" };
+        const args = Args{ .vector = fake_argv }; 
+        var iter = Args.Iterator.init(args);
+        
+        const result = try parseArgsPosix(def, &iter, nullout, nullout);
+        
+        try std.testing.expectEqualStrings("localhost", result.ip);
+        try std.testing.expectEqual(@as(u64, 8080), result.port); // Default check
+    }
+
+    {
+        const fake_argv = &[_][*:0]const u8{ "pgm", "-p3000", "-i", "192.168.1.1" };
+        const args = Args{ .vector = fake_argv }; 
+        var iter = Args.Iterator.init(args);
+        
+        const result = try parseArgsPosix(def, &iter, nullout, nullout);
+        
+        try std.testing.expectEqual(@as(u64, 3000), result.port);
+        try std.testing.expectEqualStrings("192.168.1.1", result.ip);
+    }
+
+    {
+        const fake_argv = &[_][*:0]const u8{ "pgm", "-i10.0.0.5", "--port", "9090" };
+        const args = Args{ .vector = fake_argv }; 
+        var iter = Args.Iterator.init(args);
+        
+        const result = try parseArgsPosix(def, &iter, nullout, nullout);
+        
+        try std.testing.expectEqualStrings("10.0.0.5", result.ip);
+        try std.testing.expectEqual(@as(u64, 9090), result.port);
+    }
+
+    {
+        const fake_argv = &[_][*:0]const u8{ "pgm", "-p443", "-igoogle.com" };
+        const args = Args{ .vector = fake_argv }; 
+        var iter = Args.Iterator.init(args);
+        
+        const result = try parseArgsPosix(def, &iter, nullout, nullout);
+        
+        try std.testing.expectEqual(@as(u64, 443), result.port);
+        try std.testing.expectEqualStrings("google.com", result.ip);
+    }
 }

@@ -119,14 +119,26 @@ pub fn parseArgsPosixRecursive(comptime definition: anytype, args: *Args.Iterato
             // OPTIONS
             if (has_options) {
                 inline for (definition.options) |opt| {
-                    const is_short = std.mem.eql(u8, current_arg, "--" ++ opt.field_name);
-                    const is_long = std.mem.eql(u8, current_arg, "-" ++ opt.field_short);
+                    const is_long = std.mem.eql(u8, current_arg, "--" ++ opt.field_name);
+                    const is_short = std.mem.eql(u8, current_arg, "-" ++ opt.field_short);
+                   
+                    const is_current_short = current_arg[0] == '-';
+                    const is_current_long = std.mem.startsWith(u8, current_arg, "--");
 
-                    if(is_short or is_long) {
+                    // -02 => len > 2
+                    if (is_current_short and !is_current_long and current_arg.len > 2) {
+                        if (current_arg[1] == opt.field_short[0]) { // this is just one char long!
+                            @field(result, opt.field_name) = parse.parseValue(opt.type_id, current_arg[2..]) catch |err| {
+                                try parse.printValueError(stderr, err, opt.field_name, current_arg[2..], opt.type_id);
+                                return err;
+                            };
+                        }
+                        match = true;
+                    } else if (is_short or is_long) {
                         const val = args.next(); 
                         if (val) |v| {
                             if (std.mem.startsWith(u8, v, "-")) {
-                                try stderr.print("Error: option ' {s}' has a value starting with '-' ({s})\n", .{current_arg, v});
+                                try stderr.print("Error: option '{s}' has a value starting with '-' ({s})\n", .{current_arg, v});
                                 return error.InvalidPosix;
                             }
                             @field(result, opt.field_name) = parse.parseValue(opt.type_id, v) catch |err| {
