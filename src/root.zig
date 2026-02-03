@@ -577,3 +577,28 @@ test "POSIX: Help Detection" {
         try testing.expectError(error.HelpShown, parseArgsPosix(def, &iter, nullout, nullout));
     }
 }
+
+test "POSIX: mixed flags" {
+    const def = .{ .flags = .{
+        Flag("all", "a", "all"),
+        Flag("almostall", "A", "Almost all"),
+        Flag("list", "l", "Listl"),
+        Flag("time", "t", "Sort by time"),
+        },
+    };
+    {
+        const fake_argv = &[_][*:0]const u8{ "pgm", "-aAlt" };
+        const args = Args{ .vector = fake_argv }; 
+        var iter = Args.Iterator.init(args);
+        
+        const result = try parseArgsPosix(def, &iter, nullout, nullout);
+        
+        try testing.expectEqual(true, result.all);
+        try testing.expectEqual(true, result.almostall);
+        try testing.expectEqual(true, result.list);
+        try testing.expectEqual(true, result.time);
+
+    }
+
+    
+}

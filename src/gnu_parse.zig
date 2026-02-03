@@ -60,6 +60,7 @@ pub fn parseArgsRecursive(
 
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
+        
         if (consumed[i]) continue;
 
         const current_arg = args[i];
@@ -76,7 +77,7 @@ pub fn parseArgsRecursive(
                 inline for (definition.flags) |flag| {
                     const is_short = std.mem.eql(u8, arg_key, "-" ++ flag.field_short);
                     const is_long = std.mem.eql(u8, arg_key, "--" ++ flag.field_name);
-
+                    
                     if(is_short or is_long) {
 
                         if (arg_val_inline != null) {
@@ -89,6 +90,8 @@ pub fn parseArgsRecursive(
                         matched = true;
                     }
                 }
+                
+               
             }
 
             if (!matched and has_options) {
@@ -126,7 +129,7 @@ pub fn parseArgsRecursive(
                     }
                 }
             }
-            
+                        
             // if the flag/opt was actually found, next arg
             if (matched) consumed[i] = true;
 
@@ -135,6 +138,7 @@ pub fn parseArgsRecursive(
             // return error.UnknownArgument;
         }
     } 
+
     if (@hasField(Definition, "commands")) {
         // get the type of the command field
         // serach in the ReArgs because we are looking for the Union to get which commands

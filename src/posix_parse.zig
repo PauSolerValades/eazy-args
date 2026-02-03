@@ -63,6 +63,7 @@ pub fn parseArgsPosixRecursive(comptime definition: anytype, args: *Args.Iterato
         var match = false;
         // Everything that starts with '-' can be either a flag and an option
         if (!all_flags_and_options_parsed and std.mem.startsWith(u8, current_arg, "-")) {
+           
             
             const eq_index = std.mem.indexOf(u8, current_arg, "=");
             if (eq_index) |_| {
@@ -71,6 +72,37 @@ pub fn parseArgsPosixRecursive(comptime definition: anytype, args: *Args.Iterato
             }
 
             if (has_flags) {
+                const is_current_long = current_arg[1] == '-';
+                 
+                // if it is a -la, len must be bigger than two. here we already know that it starts with -
+                if (current_arg.len > 2 and !is_current_long) {
+                    for (current_arg[1..]) |c| {
+                        var char_is_valid_flag = false; 
+                        
+                        inline for (definition.flags) |flag| {
+                            if (flag.field_short[0] == c) {
+                                char_is_valid_flag = true;
+                            }
+                        }
+
+                        if (!char_is_valid_flag){
+                            try stderr.print("Error: invalid flag '{c}' in mixed flag '{s}'\n", .{c, current_arg});
+                            return error.InvalidFlag;
+                        }
+                    }
+                    
+                    // if the code arrives here, every flag is correct
+                    for (current_arg[1..]) |c| {
+                        inline for (definition.flags) |flag| {
+                            if (flag.field_short[0] == c) {
+                                @field(result, flag.field_name) = true;
+                            }
+                        }
+                    }
+                    continue :args_loop;
+                    //match = true;
+                }
+
                 inline for (definition.flags) |flag| {
                     const is_long = std.mem.eql(u8, current_arg, "--" ++ flag.field_name);
                     const is_short = std.mem.eql(u8, current_arg, "-" ++ flag.field_short);
