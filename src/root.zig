@@ -19,13 +19,40 @@ pub const ParseErrors = parse.ParseErrors;
 
 /// GNU "freestyle" parsing implementation. Options and flags can be expressed in any point of the command line, 
 /// regardless in which nested level is the option or flag defined.
+/// The trade-off for flexibility are (1) the use of a consumed (buffer 256 arguments) mask to keep track of which option has been parsed
+/// (2) makes at most 3 iterations per every level of the definition to make sure none is skipped (roughly $O(3*n)$
+/// times all the subcommands (m_i) and its depth (nested subcommands) (3) copy of args in dynamic memory to be able to iterate 
+/// over the list several times.
+/// TBD: fully compliance with the GNU Parsing Arguments (26.1.1 of https://sourceware.org/glibc/manual/latest/html_mono/libc.html#Program-Arguments)
+/// That is (1) long and short flags (2) equal to set the value options (3) finishes by -- (4) multiple flags provided (what actually happens?)
+pub fn parseArgs(comptime definition: anytype, args: []const []const u8, stdout: *Io.Writer, stderr: *Io.Writer) !Reify(definition) {
+
+    validation.validateDefinition(definition, 0);
+    
+    // if the user passes just the program name
+    if (args.len == 1) {
+        try parse.printUsage(definition, stdout, args[0]);
+        return error.HelpShown;
+    }
+
+    var buffer: [256]bool = undefined;
+    const consumed = buffer[0..args.len];
+
+    @memset(consumed, false);
+    if (args.len > 0) consumed[0] = true; // Consumed program name
+
+    return gnu.parseArgsRecursive(definition, args, consumed, &context, stdout, stderr);
+}
+
+/// GNU "freestyle" parsing implementation. Options and flags can be expressed in any point of the command line, 
+/// regardless in which nested level is the option or flag defined.
 /// The trade-off for flexibility are (1) the use of a consumed (allocated) mask to keep track of which option has been parsed
 /// (2) makes at most 3 iterations per every level of the definition to make sure none is skipped (roughly $O(3*n)$
 /// times all the subcommands (m_i) and its depth (nested subcommands) (3) copy of args in dynamic memory to be able to iterate 
 /// over the list several times.
 /// TBD: fully compliance with the GNU Parsing Arguments (26.1.1 of https://sourceware.org/glibc/manual/latest/html_mono/libc.html#Program-Arguments)
 /// That is (1) long and short flags (2) equal to set the value options (3) finishes by -- (4) multiple flags provided (what actually happens?)
-pub fn parseArgs(gpa: Allocator, comptime definition: anytype, args: []const []const u8, stdout: *Io.Writer, stderr: *Io.Writer) !Reify(definition) {
+pub fn parseArgsAllocator(gpa: Allocator, comptime definition: anytype, args: []const []const u8, stdout: *Io.Writer, stderr: *Io.Writer) !Reify(definition) {
    
     // this will throw a compile error if definition is not valid
     validation.validateDefinition(definition, 0);
@@ -37,11 +64,11 @@ pub fn parseArgs(gpa: Allocator, comptime definition: anytype, args: []const []c
     }
     const consumed = try gpa.alloc(bool, args.len);
     defer gpa.free(consumed);
+
     @memset(consumed, false);
     consumed[0] = true;
 
     const exename = std.fs.path.basename(args[0]);
-
     const context = parse.ContextNode{ .name = exename };
 
     // call the recursive version to adapt it
