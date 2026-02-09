@@ -7,7 +7,7 @@ const reification = @import("reification.zig");
 
 const Reify = reification.Reify;
 const parseErrors = parse.ParseErrors;
-
+const ContextNode = parse.ContextNode;
 
 /// The function parses 
 /// Rules on the parsing:
@@ -17,11 +17,10 @@ const parseErrors = parse.ParseErrors;
 ///     can be interchangable, and opt/flags can be mixed toghether
 /// 4. No flags nor options can be between commands. If a flag/option is specific of a subcommand, add it before the last command.
 pub fn parseArgsRecursive(
-    gpa: Allocator,
     comptime definition: anytype, 
     args: []const[]const u8, 
     consumed: []bool,
-    path: []const u8,
+    ctx: ?*const ContextNode,
     stdout: *Io.Writer, 
     stderr: *Io.Writer
     ) anyerror!Reify(definition){
@@ -43,7 +42,6 @@ pub fn parseArgsRecursive(
             // we have to fill the struct
             // we are sure that definition IS the same as ReArgs struct
             @field(result, flag.field_name) = false;
-        
         }
     }
 
@@ -67,7 +65,7 @@ pub fn parseArgsRecursive(
         
         if (std.mem.startsWith(u8, current_arg, "-")) {
             var matched = false;
-           
+            
             const eq_index = std.mem.indexOf(u8, current_arg, "=");
             
             const arg_key = if (eq_index) |idx| current_arg[0..idx] else current_arg;
@@ -169,12 +167,14 @@ pub fn parseArgsRecursive(
                         const name: []const u8 = @tagName(tag); // converts the enum into a string
                         const def_subcmd = @field(definition.commands, name);
                         
-                        // create the path for the printUsage                        
-                        const new_path = try std.fmt.allocPrint(gpa, "{s} {s}", .{path, name});
-                        defer gpa.free(new_path);
-                       
+                        const current_node = ContextNode{
+                            .name = name,
+                            .parent = ctx,
+                        };
+
+                      
                         // we know this is a valid command, so we recursively parse the Args 
-                        const parsedCmd = try parseArgsRecursive(gpa, def_subcmd, args, consumed, new_path, stdout, stderr);
+                        const parsedCmd = try parseArgsRecursive(def_subcmd, args, consumed, &current_node, stdout, stderr);
                         result.cmd = @unionInit(CommandUnion, name, parsedCmd);              
 
                         return result;
@@ -188,7 +188,7 @@ pub fn parseArgsRecursive(
     // if this is not here, the printUsage will never adapt to the callee level
     for (args, 0..) |arg, k| {
         if (!consumed[k] and (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "help"))) {
-            try parse.printUsage(definition, stdout, path);
+            try parse.printUsageCtx(definition, ctx, stdout);
             return error.HelpShown;
         }
     }

@@ -42,8 +42,10 @@ pub fn parseArgs(gpa: Allocator, comptime definition: anytype, args: []const []c
 
     const exename = std.fs.path.basename(args[0]);
 
+    const context = parse.ContextNode{ .name = exename };
+
     // call the recursive version to adapt it
-    return gnu.parseArgsRecursive(gpa, definition, args, consumed, exename, stdout, stderr);
+    return gnu.parseArgsRecursive(definition, args, consumed, &context, stdout, stderr);
 }
 
 /// POSIX compliant argument parsing (https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap12.html)

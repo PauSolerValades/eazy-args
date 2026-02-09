@@ -237,7 +237,8 @@ pub const ContextNode = struct {
         self: ContextNode,
         writer: *Io.Writer,
     ) !void {
-        if (self.parent) |_| {
+        if (self.parent) |p| {
+            try p.format(writer);
             try writer.print(" {s}", .{self.name});
         } else {
             try writer.print("{s}", .{self.name});
