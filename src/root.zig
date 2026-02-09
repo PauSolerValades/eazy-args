@@ -17,7 +17,6 @@ pub const Option = structs.Option;
 pub const Flag = structs.Flag;
 pub const ParseErrors = parse.ParseErrors;
 
-
 /// GNU "freestyle" parsing implementation. Options and flags can be expressed in any point of the command line, 
 /// regardless in which nested level is the option or flag defined.
 /// The trade-off for flexibility are (1) the use of a consumed (allocated) mask to keep track of which option has been parsed
@@ -56,9 +55,18 @@ pub fn parseArgsPosix(comptime definition: anytype, args: *Args.Iterator, stdout
     
     validation.validateDefinition(definition, 0);
     
-    _ = args.skip(); // skip the program name
+    // _ = args.skip(); // skip the program name
+    const program_name = args.next();
+    
+    if (program_name) |name| {
+        const context = parse.ContextNode{ .name = name };
 
-    return posix.parseArgsPosixRecursive(definition, args, stdout, stderr);
+        return posix.parseArgsPosixRecursive(definition, args, &context, stdout, stderr);
+    } 
+
+    try parse.printUsageCtx(definition, null, stdout);
+    return error.HelpShown;
+
 }
 
 
@@ -678,3 +686,30 @@ test "POSIX: mixed attached and separated options" {
         try std.testing.expectEqualStrings("google.com", result.ip);
     }
 }
+
+test "POSIX: Conflict - Attached Option vs Flag Bundle" {
+    const def = .{
+        .flags = .{ 
+            Flag("verbose", "v", "Enable verbose output") 
+        },
+        .options = .{ 
+            Opt(u64, "port", "p", 8080, "Port") 
+        },
+    };
+
+
+    // 2. Pass an attached option (-p80)
+    // If the parser thinks this is a flag bundle, it will try to find a flag named 'p'.
+    // It won't find it (since 'p' is an option), and it will crash.
+    const fake_argv = &[_][*:0]const u8{ "pgm", "-p80" };
+    
+    const args = Args{ .vector = fake_argv }; 
+    var iter = Args.Iterator.init(args);
+    
+    // 3. This will FAIL if Flags are parsed before Options
+    const result = try parseArgsPosix(def, &iter, nullout, nullout);
+    
+    try std.testing.expectEqual(@as(u64, 80), result.port);
+    try std.testing.expectEqual(false, result.verbose);
+}
+
