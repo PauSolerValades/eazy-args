@@ -50,121 +50,36 @@ pub fn parseValue(comptime T: type, str: []const u8) !T {
     return error.UnsupportedType;
 }
 
+pub const ContextNode = struct {
+    name: []const u8,
+    parent: ?*const ContextNode = null,
+    
+    pub fn format(
+        self: ContextNode,
+        writer: *Io.Writer,
+    ) !void {
+        if (self.parent) |p| {
+            try p.format(writer);
+            try writer.print(" {s}", .{self.name});
+        } else {
+            try writer.print("{s}", .{self.name});
+        }
+    }
+};
 
 /// Prints the help message. Depending on which level of the definition is called,
 /// the behaviour will change.
-pub fn printUsage(comptime def: anytype, writer: *Io.Writer, path: []const u8) !void {
-    const T = @TypeOf(def);
-    
-    const is_root = (std.mem.indexOf(u8, path, " ") == null);   
-    // print description, if it's not found is left blank
-   
-    if (is_root and @hasField(T, "description")) {
-        try writer.print("{s}\n\n", .{def.description});
-    }
-    
-    // usage line
-    try writer.writeAll("Usage: ");
-    if (@hasField(T, "name")) {
-        try writer.print("{s} ", .{def.name});
-    } else {
-        try writer.print("{s} ", .{path});
-    }
-
-    if (@hasField(T, "options") or @hasField(T, "flags")) {
-        try writer.writeAll("[options] ");
-    }
-
-    // print commands with tab
-    if (@hasField(T, "commands")) {
-         try writer.writeAll("[commands]");
-    } else if (@hasField(T, "required")) {
-        inline for (def.required) |req| {
-            try writer.print("<{s}> ", .{req.field_name});
-        }
-    }
-    try writer.writeAll("\n");
-    
-    if (!is_root and @hasField(T, "description")) {
-        // Add a little indentation or just a raw line
-        try writer.print("\nDescription: {s}\n", .{def.description});
-    }
-    
-    try writer.writeAll("\n");
-    //options and flags
-    if (@hasField(T, "options") or @hasField(T, "flags")) {
-        try writer.writeAll("Options:\n");
-        if (@hasField(T, "flags")) {
-            inline for (def.flags) |flag| {
-                try writer.print("  -{s}, --{s: <15} {s}\n", 
-                    .{flag.field_short, flag.field_name, flag.help});
-            }
-        }
-        if (@hasField(T, "options")) {
-            inline for (def.options) |opt| {
-                 try writer.print("  -{s}, --{s: <15} {s}\n", 
-                    .{opt.field_short, opt.field_name, opt.help});
-            }
-        }
-        try writer.writeAll("\n");
-    }
-    
-    // commands
-    if (@hasField(T, "commands")) {
-        try writer.writeAll("Commands:\n");
-        // 2 is the indent baseline
-        try printCommandTree(def.commands, writer, 2);
-        try writer.writeAll("\n");
-    }
-
-    if (@hasField(T, "required") and !@hasField(T, "commands")) {
-        try writer.writeAll("Arguments:\n");
-        inline for (def.required) |req| {
-            try writer.print("  {s: <15} {s}\n", .{req.field_name, req.help});
-        }
-        try writer.writeAll("\n");
-    }
-}
-
-/// Helper to print the tree recursively
-fn printCommandTree(comptime cmds: anytype, writer: anytype, indent: usize) !void {
-    const fields = @typeInfo(@TypeOf(cmds)).@"struct".fields;
-
-    inline for (fields) |f| {
-        const cmd_def = @field(cmds, f.name);
-        
-        // Print the Command Name + Description
-        for (0..indent) |_| {
-            try writer.writeByte(' ');
-        }
-        try writer.print("{s: <21}", .{f.name});
-        
-        if (@hasField(@TypeOf(cmd_def), "description")) {
-            try writer.print(" {s}", .{cmd_def.description});
-        }
-        try writer.writeAll("\n");
-
-        // Recursion to print all the subleafs!
-        if (@hasField(@TypeOf(cmd_def), "commands")) {
-            try printCommandTree(cmd_def.commands, writer, indent + 2);
-        }
-    }
-}
-
 pub fn printUsageCtx(comptime def: anytype, context: ?*const ContextNode, writer: *Io.Writer) !void {
     const T = @TypeOf(def);
     
-    // 1. Determine Root
-    // If context is null (start) or context.parent is null (top-level command like 'git'), we are at root.
     const is_root = if (context) |ctx| ctx.parent == null else true;
-
-    // Print description at the top for Root
+    // print description, if it's not found is left blank
+    
     if (is_root and @hasField(T, "description")) {
         try writer.print("{s}\n\n", .{def.description});
     }
     
-    // 2. Usage Line
-    try writer.writeAll("Usage: ");
+    try writer.writeAll("Usage: "); // usage line
     
     if (context) |ctx| {
         try writer.print("{f} ", .{ctx.*});
@@ -175,7 +90,7 @@ pub fn printUsageCtx(comptime def: anytype, context: ?*const ContextNode, writer
             try writer.writeAll("app ");
         }
     }
-
+    
     if (@hasField(T, "options") or @hasField(T, "flags")) {
         try writer.writeAll("[options] ");
     }
@@ -229,26 +144,29 @@ pub fn printUsageCtx(comptime def: anytype, context: ?*const ContextNode, writer
     }
 }
 
-pub const ContextNode = struct {
-    name: []const u8,
-    parent: ?*const ContextNode = null,
-    
-    pub fn format(
-        self: ContextNode,
-        writer: *Io.Writer,
-    ) !void {
-        if (self.parent) |p| {
-            try p.format(writer);
-            try writer.print(" {s}", .{self.name});
-        } else {
-            try writer.print("{s}", .{self.name});
+/// Helper to print the tree recursively
+fn printCommandTree(comptime cmds: anytype, writer: anytype, indent: usize) !void {
+    const fields = @typeInfo(@TypeOf(cmds)).@"struct".fields;
+
+    inline for (fields) |f| {
+        const cmd_def = @field(cmds, f.name);
+        
+        // Print the Command Name + Description
+        for (0..indent) |_| {
+            try writer.writeByte(' ');
+        }
+        try writer.print("{s: <21}", .{f.name});
+        
+        if (@hasField(@TypeOf(cmd_def), "description")) {
+            try writer.print(" {s}", .{cmd_def.description});
+        }
+        try writer.writeAll("\n");
+
+        // Recursion to print all the subleafs!
+        if (@hasField(@TypeOf(cmd_def), "commands")) {
+            try printCommandTree(cmd_def.commands, writer, indent + 2);
         }
     }
-};
-
-pub fn oldPrintUsage(comptime definition: anytype, writer: *Io.Writer) !void {
-    _ = definition; 
-    try writer.writeAll("Usage: app");
 }
 
 
