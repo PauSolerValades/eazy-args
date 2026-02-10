@@ -10,12 +10,15 @@ const gnu = @import("gnu_parse.zig");
 const posix = @import("posix_parse.zig");
 const parse = @import("parse.zig");
 
+const PeekIterator = parse.PeekIterator;
+
 // make the structs public to access them from main
 pub const Reify = reification.Reify;
 pub const Argument = structs.Argument; 
 pub const Option = structs.Option;
 pub const Flag = structs.Flag;
 pub const ParseErrors = parse.ParseErrors;
+
 
 /// GNU "freestyle" parsing implementation. Options and flags can be expressed in any point of the command line, 
 /// regardless in which nested level is the option or flag defined.
@@ -101,6 +104,22 @@ pub fn parseArgsPosix(comptime definition: anytype, args: *Args.Iterator, stdout
 
 }
 
+pub fn parseArgsErgonomic(comptime definition: anytype, args: *Args.Iterator, stdout: *Io.Writer, stderr: *Io.Writer) anyerror!Reify(definition) {
+    
+    validation.validateDefinition(definition, 0);
+    
+    const piter = PeekIterator.init(args);
+    
+    if (piter.next) |name| {
+        const context = parse.ContextNode{ .name = name };
+
+        return posix.parseArgsErgonomicRecursive(definition, &piter, &context, stdout, stderr);
+    } 
+
+    try parse.printUsageCtx(definition, null, stdout);
+    return error.HelpShown;
+
+}
 
 const testing = std.testing;
 const ta = testing.allocator; 

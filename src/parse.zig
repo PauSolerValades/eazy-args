@@ -1,5 +1,6 @@
 const std = @import("std");
 const Io = std.Io;
+const Args = std.process.Args;
 
 pub const ParseErrors = error { HelpShown, MissingArgument, MissingValue, UnknownArgument, UnexpectedArgument };
 
@@ -168,6 +169,30 @@ fn printCommandTree(comptime cmds: anytype, writer: anytype, indent: usize) !voi
         }
     }
 }
+
+
+const PeekIterator = struct { 
+    iterator: Args.Iterator,
+    current: ?[:0]const u8,
+
+    pub fn init(self: @This(), args: *Args.Iterator) void {
+        return PeekIterator{
+            .iterator = &args,
+            .current = self.iterator.next(),
+        };
+    }
+
+    pub fn peek(self: @This()) ?[:0]const u8 {
+        return self.current;
+    }
+
+    pub fn next(self: @This()) ?[:0]const u8 {
+        const val = self.current;
+        self.current = self.init.next();
+        return val; 
+    }
+};
+
 
 
 const talloc = std.testing.allocator;
