@@ -62,7 +62,7 @@ pub fn main(init: std.process.Init) !void {
     
     //convert the args into a slice
     const args = try init.minimal.args.toSlice(init.arena.allocator()); 
-    const arguments = argz.parseArgs(init.gpa, gitu_def, args, stdout, stderr) catch |err| {
+    const arguments = argz.parseArgsAllocator(init.gpa, gitu_def, args, stdout, stderr) catch |err| {
         switch (err) {
             ParseErrors.HelpShown => try stdout.flush(),
             else => try stderr.flush(),

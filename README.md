@@ -1,6 +1,6 @@
 # EazyArgs
 
-A simple, type-safe, no boilerplate arg parser for Zig that leverages compile-time meta-programming to generate and fill an struct according to the provided definitions.
+A simple, elegant, type-safe, no boilerplate argparser for Zig that leverages compile-time meta-programming to generate and fill an struct according to the provided definitions.
 Absolutely inspired by @gouwsxander [easy-args](https://github.com/gouwsxander/easy-args) C library.
 
 ## Main Idea
@@ -87,7 +87,7 @@ The POSIX implementation has three main advantages directly related to the stric
 + No arg slice: the function accepts a `*std.process.Args.Iterator` instead of an slice. This will require an allocator in Windows `var iter = init.minimal.args.iterateAllocator(allocator)`.
 + Efficiency: it's exactly $O(n)$ complexity, where n is the number of element in the *Args.Iterator. `parseArgs` requires three full sweeps over the original list for every different command and subcommands of that (it grows to the cube).
 
-At the end of the README there is a section regarding fully compliance with POSIX standards. **WARNING**: at this time, not ALL functionality for POSIX is implemented, as well as the help string, which does not work! At the end of the document this is discussed more in depth.
+At the end of the README there is a section regarding fully compliance with POSIX standards.
 
 ## Command example
 _[See `examples/database.zig`]_
@@ -199,9 +199,9 @@ To allow for multiple nesting within commands the following rules will be enforc
 Once parsed, it can be accessed with nested switch statements:
 
 ```zig
-const args = try init.minimal.args.toslice(init.gpa);
+const args = try init.minimal.args.toSlice(init.gpa);
 defer init.gpa.free(args);
-const arguments = argz.parseargs(init.gpa, def, args, stdout, stderr) catch |err| {
+const arguments = argz.parseArgs(init.gpa, def, args, stdout, stderr) catch |err| {
     switch (err) {
         parseerrors.helpshown => try stdout.flush(),
         else => try stderr.flush(),
@@ -263,7 +263,7 @@ Commands:
 
 The descriptions in the help message must be specified in the definition, if not will be left empty; `.name` will appear in the usage, and `.description` describes every command or subcommand. The above message was generated from the following definition:
 
-```
+```zig
 const gitu_definition = .{
     // what's your programs name and what does it do
     .name = "gitu",
@@ -366,33 +366,14 @@ ParseErrors - Errors returned by the parse functions
 
 ## About _strict_ POSIX compliance
 
-Right now, the following features are not supported, but will be:
-- -- to denote the end (this is also not supported in GNU)
-- concatenate multiple flags in one (eg `-abv ` instead of `-a -b -v`)
-- Option with an optional argument -f[value], will be implemented with another object `LinkedOption` which can colive with `.option` 
-
-Probably, the only option the library will not implement is mutually exclusive flags (`[-a|-b]`). This behaviour is much easily enforced by the user afterwards with simple if statements:
+The function `parseArgsPosix` is fully POSIX compliant, except mutually exclusive flags (`[-a|-b]`) cannot be stated in the definition. The reasoning behind this decision is to mantain simplicity: to define this within the definition with a `.exclusive` tag would just make the definition too complex for my linking. Additionally, the mutually exclusive behaviour can get easily enforced by the user afterwards with simple if statements:
 
 ```
 if (args.quiet and args.verbose) std.process.exit(0)
 ```
 
-Rather than making something like the following snippet in the definition:
-```
-const def = .{
-  .flags = .{
-    .required = .{ Flag("quiet", "q", "Don't print"), Flag("verbose", "v", "Print more") },
-    Flag("normal", "n", "another flag which is not exclusive"),
-  }
-}
-```
+Lastly, POSIX does not allow a double representation of the same flag `-v/--verbose` but `parseArgsPosix` allows it. It does not limit the ability of the function to parse a POSIX args, but allows to specify some flag. I prefer some amount of flexibility and giving up a not strictly fully compliant.
 
-But I have to think about it.
-
-Lastly, POSIX does not allow a double representation of the same flag `-v/--verbose` so the `parseArgsPosix` should not allow it. I have mixed feelings about this: removing it would be the "correct" thing to make exactly POSIX but i feel long/short options and flags are super standard nowadays, so I really wonder if levaing the option and if you want an exactly posix compilant just don't use it is maybe the most user friendly approach?
-
-# TODO:
-+ Fix spacing in `printUsage`. Probably i will have to compute the min identation per every subcommand
-+ Add a small usage when not all commands have been provided. That is, `tally entry start` now says `Error: Incorrect number of required arguments detected. Should be 1 but are 0.` which is techincally correct, but the user expects to see `Usage: tally entry start --projectid <description> `
-+ Implement `printUsage` for POSIX: as i was already using an allocator in GNU style, i did not care that to know the path i had to use one. In POSIX no allocator is needed, i have to really think about what should I do. I don't think the path is going to disappear from the printUsage, so I'll probably use a generous buffer (512?)
-+ POSIX functionalities: Described at the above section.
+## TODO:
++ Add a small usage when not all commands have been provided. That is, `tally entry start` now says `Error: Incorrect number of required arguments detected. Should be 1 but are 0.` which is technically correct, but the user expects to see `Usage: tally entry start --projectid <description> `
++ Clean up error: i think i have different names for different errors. As I never did anything with them, i have to refactor them once and for all.

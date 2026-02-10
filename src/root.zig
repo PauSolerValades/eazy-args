@@ -39,8 +39,11 @@ pub fn parseArgs(comptime definition: anytype, args: []const []const u8, stdout:
     const consumed = buffer[0..args.len];
 
     @memset(consumed, false);
-    if (args.len > 0) consumed[0] = true; // Consumed program name
+    consumed[0] = true; // Consumed program name
 
+    const exename = std.fs.path.basename(args[0]);
+    const context = parse.ContextNode{ .name = exename };
+    
     return gnu.parseArgsRecursive(definition, args, consumed, &context, stdout, stderr);
 }
 
@@ -59,7 +62,7 @@ pub fn parseArgsAllocator(gpa: Allocator, comptime definition: anytype, args: []
    
     // if the user passes just the program name
     if (args.len == 1) {
-        try parse.printUsage(definition, stdout, args[0]);
+        try parse.printUsageCtx(definition, null, stdout);
         return error.HelpShown;
     }
     const consumed = try gpa.alloc(bool, args.len);
