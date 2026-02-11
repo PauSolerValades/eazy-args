@@ -108,12 +108,12 @@ pub fn parseArgsErgonomic(comptime definition: anytype, args: *Args.Iterator, st
     
     validation.validateDefinition(definition, 0);
     
-    const piter = PeekIterator.init(args);
+    var piter = PeekIterator.init(args);
     
-    if (piter.next) |name| {
+    if (piter.next()) |name| {
         const context = parse.ContextNode{ .name = name };
-
-        return posix.parseArgsErgonomicRecursive(definition, &piter, &context, stdout, stderr);
+        _ = context;
+        return posix.parseArgsErgonomicRecursive(definition, &piter, .{}, stdout, stderr);
     } 
 
     try parse.printUsageCtx(definition, null, stdout);
@@ -141,7 +141,7 @@ test "Normal parsing: required, flags, options" {
     // GNU "pgm 42 -v --mode fast" 
     {
         const args = &[_][]const u8{ "pgm", "42", "-v", "--mode", "fast" };
-        const result = try parseArgs(ta, def, args, nullout, nullout);
+        const result = try parseArgsAllocator(ta, def, args, nullout, nullout);
 
         try testing.expectEqual(@as(u32, 42), result.count);
         try testing.expectEqual(true, result.verbose);
@@ -150,7 +150,7 @@ test "Normal parsing: required, flags, options" {
     // GNU "pgm -v 42 --mode fast"
     {
         const args = &[_][]const u8{ "pgm", "-v", "42", "--mode", "fast" };
-        const result = try parseArgs(ta, def, args, nullout, nullout);
+        const result = try parseArgsAllocator(ta, def, args, nullout, nullout);
 
         try testing.expectEqual(@as(u32, 42), result.count);
         try testing.expectEqual(true, result.verbose);
@@ -186,7 +186,7 @@ test "Normal parsing: 2 args, 2 flags, 2 options" {
             "--threshold", "25",
         };
 
-        const result = try parseArgs(ta, def, args, nullout, nullout);
+        const result = try parseArgsAllocator(ta, def, args, nullout, nullout);
 
         try testing.expectEqual(@as(u32, 42), result.count);
         try testing.expectEqual(@as(f64, 1.5), result.scale);
@@ -205,7 +205,7 @@ test "Normal parsing: 2 args, 2 flags, 2 options" {
             "-d",
         };
 
-        const result = try parseArgs(ta, def, args, nullout, nullout);
+        const result = try parseArgsAllocator(ta, def, args, nullout, nullout);
 
         try testing.expectEqual(@as(u32, 42), result.count);
         try testing.expectEqual(@as(f64, 1.5), result.scale);
@@ -222,7 +222,7 @@ test "Normal parsing: 2 args, 2 flags, 2 options" {
             "--threshold", "25",
         };
 
-        const result = try parseArgs(ta, def, args, nullout, nullout);
+        const result = try parseArgsAllocator(ta, def, args, nullout, nullout);
 
         try testing.expectEqual(@as(u32, 42), result.count);
         try testing.expectEqual(@as(f64, 1.5), result.scale);
@@ -241,7 +241,7 @@ test "Normal parsing: 2 args, 2 flags, 2 options" {
         };
 
 
-        try testing.expectError(error.MissingRequired, parseArgs(ta, def, args, nullout, nullout));
+        try testing.expectError(error.MissingRequired, parseArgsAllocator(ta, def, args, nullout, nullout));
     }
     // NO REQUIREDS "pgm -v -d --mode fast -- threshold 25"
     {
@@ -253,7 +253,7 @@ test "Normal parsing: 2 args, 2 flags, 2 options" {
             "--threshold", "25",
         };
 
-        try testing.expectError(error.MissingRequired, parseArgs(ta, def, args, nullout, nullout));
+        try testing.expectError(error.MissingRequired, parseArgsAllocator(ta, def, args, nullout, nullout));
     }
 }
 
@@ -280,7 +280,7 @@ test "Parsing optional with ?type" {
     // "tally entry start 'hello' -p 1"
     {
         const args = &[_][]const u8{ "tally", "entry", "start", "hello", "-p", "1" };
-        const result = try parseArgs(ta, def, args, nullout, nullout);
+        const result = try parseArgsAllocator(ta, def, args, nullout, nullout);
 
         try testing.expectEqual(false, result.verbose);
 
@@ -296,7 +296,7 @@ test "Parsing optional with ?type" {
     // "tally entry start 'meeting'"
     {
         const args = &[_][]const u8{ "tally", "entry", "start", "meeting" };
-        const result = try parseArgs(ta, def, args, nullout, nullout);
+        const result = try parseArgsAllocator(ta, def, args, nullout, nullout);
 
         const start_cmd = result.cmd.entry.cmd.start;
         try testing.expectEqualStrings("meeting", start_cmd.description);
@@ -323,7 +323,7 @@ test "Two subcommands with shared definition" {
     // "delete 100 --force"
     {
         const args = &[_][]const u8{ "pgm","delete", "100", "--force" };
-        const result = try parseArgs(ta, def, args, nullout, nullout);
+        const result = try parseArgsAllocator(ta, def, args, nullout, nullout);
 
         try testing.expect(result.cmd == .delete); 
         // Verify values inside delete
@@ -335,7 +335,7 @@ test "Two subcommands with shared definition" {
     // "update 50 -r 5"
     {
         const args = &[_][]const u8{ "pgm","update", "50", "-r", "5" };
-        const result = try parseArgs(ta, def, args, nullout, nullout);
+        const result = try parseArgsAllocator(ta, def, args, nullout, nullout);
 
         try testing.expect(result.cmd == .update);
         try testing.expectEqual(@as(u32, 50), result.cmd.update.id);
@@ -359,7 +359,7 @@ test "Subcommands with options/flags at multiple levels" {
 
     const args = &[_][]const u8{ "pgm","-g", "commit", "--amend", "fix bug" };
     
-    const result = try parseArgs(ta, def, args, nullout, nullout);
+    const result = try parseArgsAllocator(ta, def, args, nullout, nullout);
 
     try testing.expectEqual(true, result.@"git-dir");
     try testing.expectEqualStrings("admin", result.user);
@@ -390,7 +390,7 @@ test "Two nested subcommands" {
 
     const args = &[_][]const u8{ "pgm","cloud", "server", "create", "--dry-run", "my-web-app" };
     
-    const result = try parseArgs(ta, def, args, nullout, nullout);
+    const result = try parseArgsAllocator(ta, def, args, nullout, nullout);
     try testing.expect(result.cmd == .cloud);
     try testing.expect(result.cmd.cloud.cmd == .server);
     try testing.expect(result.cmd.cloud.cmd.server.cmd == .create);
@@ -408,22 +408,22 @@ test "Help shown" {
     // "-h"
     {
         const args = &[_][]const u8{ "pgm", "-h" };
-        try testing.expectError(error.HelpShown, parseArgs(ta, def, args, nullout, nullout));
+        try testing.expectError(error.HelpShown, parseArgsAllocator(ta, def, args, nullout, nullout));
     }
     // "--help"
     {
         const args = &[_][]const u8{ "pgm", "--help" };
-        try testing.expectError(error.HelpShown, parseArgs(ta, def, args, nullout, nullout));
+        try testing.expectError(error.HelpShown, parseArgsAllocator(ta, def, args, nullout, nullout));
     }
     //"help" (as a command/argument)
     {
         const args = &[_][]const u8{ "pgm", "help" };
-        try testing.expectError(error.HelpShown, parseArgs(ta, def, args, nullout, nullout));
+        try testing.expectError(error.HelpShown, parseArgsAllocator(ta, def, args, nullout, nullout));
     }
     // empty args
     {
         const args = &[_][]const u8{"pgm"};
-        try testing.expectError(error.HelpShown, parseArgs(ta, def, args, nullout, nullout));
+        try testing.expectError(error.HelpShown, parseArgsAllocator(ta, def, args, nullout, nullout));
     }
 }
 
@@ -439,7 +439,7 @@ test "Mixed assignment styles (= vs space)" {
     };
 
     const args = &[_][]const u8{ "pgm", "123", "--mode=fast", "--count", "5", "-v" };
-    const result = try parseArgs(ta, def, args, nullout, nullout);
+    const result = try parseArgsAllocator(ta, def, args, nullout, nullout);
 
     try testing.expectEqual(@as(u32, 123), result.id);
     try testing.expectEqualStrings("fast", result.mode);
@@ -585,7 +585,7 @@ test "POSIX: Multi-level Commands and Globals" {
         try testing.expectEqualStrings("fix bug", result.cmd.commit.msg);
     }
     
-    // FAIL: Global flag placed INSIDE subcommand
+    // global flag placed INSIDE subcommand
     // "pgm commit -g 'fix bug'"
     {
         const fake_argv = &[_][*:0]const u8{ "pgm", "commit", "-g", "fix bug" };
@@ -749,7 +749,7 @@ test "POSIX: Conflict - Attached Option vs Flag Bundle" {
     };
 
 
-    // 2. Pass an attached option (-p80)
+    // Pass an attached option (-p80)
     // If the parser thinks this is a flag bundle, it will try to find a flag named 'p'.
     // It won't find it (since 'p' is an option), and it will crash.
     const fake_argv = &[_][*:0]const u8{ "pgm", "-p80" };
@@ -757,10 +757,275 @@ test "POSIX: Conflict - Attached Option vs Flag Bundle" {
     const args = Args{ .vector = fake_argv }; 
     var iter = Args.Iterator.init(args);
     
-    // 3. This will FAIL if Flags are parsed before Options
+    // This will FAIL if flags are parsed before options
     const result = try parseArgsPosix(def, &iter, nullout, nullout);
     
     try std.testing.expectEqual(@as(u64, 80), result.port);
     try std.testing.expectEqual(false, result.verbose);
 }
 
+
+
+test "Ergonomic POSIX: Normal parsing (Flags, Options, Required)" {
+    const def = .{
+        .required = .{ Arg(u32, "count", "The number of items") },
+        .flags = .{ Flag("verbose", "v", "Enable verbose output") },
+        .options = .{ Opt([]const u8, "mode", "m", "default", "Operation mode") },
+    };
+
+    // "pgm -v -m fast 42"
+    {
+        const fake_argv = &[_][*:0]const u8{ "pgm", "-v", "-m", "fast", "42"};
+        const args = Args{ .vector = fake_argv }; 
+        var iter = Args.Iterator.init(args);
+
+        const result = try parseArgsErgonomic(def, &iter, nullout, nullout);
+        
+        try testing.expectEqual(@as(u32, 42), result.count);
+        try testing.expectEqual(true, result.verbose);
+        try testing.expectEqualStrings("fast", result.mode);
+    }
+    
+    // "pgm 42 -v"
+    {
+        const fake_argv = &[_][*:0]const u8{ "pgm", "42", "-v"};
+        const args = Args{ .vector = fake_argv }; 
+        var iter = Args.Iterator.init(args);
+
+        const result = try parseArgsErgonomic(def, &iter, nullout, nullout);
+        
+        try testing.expectEqual(@as(u32, 42), result.count);
+        try testing.expectEqual(true, result.verbose);
+    }
+
+    // "pgm 42 --mode fast"
+    {
+        const fake_argv = &[_][*:0]const u8{ "pgm", "42", "--mode", "fast"};
+        const args = Args{ .vector = fake_argv }; 
+        var iter = Args.Iterator.init(args);
+
+        const result = try parseArgsErgonomic(def, &iter, nullout, nullout);
+        
+        try testing.expectEqual(@as(u32, 42), result.count);
+        try testing.expectEqualStrings("fast", result.mode);
+    }
+}
+
+test "Ergonomic POSIX: Invalid '=' usage" {
+    // Even in ergonomic mode, we reject non-POSIX style '=' if strictness is desired on syntax
+    const def = .{
+        .required = .{ Arg(u32, "id", "ID") },
+        .options = .{ Opt([]const u8, "mode", "m", "default", "Mode") },
+    };
+    // "pgm --mode=fast 123"
+    {
+        const fake_argv = &[_][*:0]const u8{ "pgm", "--mode=fast", "123" };
+        const args = Args{ .vector = fake_argv }; 
+        var iter = Args.Iterator.init(args);
+
+        try testing.expectError(error.InvalidPosix, parseArgsErgonomic(def, &iter, nullout, nullout));
+    }
+}
+
+test "Ergonomic POSIX: Subcommands and Flexible Flags" {
+    const subdef = .{
+        .required = .{ Arg(u32, "id", "Resource ID") },
+        .flags = .{ Flag("force", "f", "Force operation") },
+        .options = .{ Opt(u32, "retry", "r", 1, "Number of retries") },
+    };
+
+    const def = .{
+        .commands = .{
+            .delete = subdef,
+            .update = subdef,
+        },
+    };
+
+    // "pgm delete -f 100"
+    {
+        const fake_argv = &[_][*:0]const u8{ "pgm", "delete", "-f", "100" };
+        const args = Args{ .vector = fake_argv }; 
+        var iter = Args.Iterator.init(args);
+
+        const result = try parseArgsErgonomic(def, &iter, nullout, nullout);
+
+        try testing.expect(result.cmd == .delete); 
+        try testing.expectEqual(@as(u32, 100), result.cmd.delete.id);
+        try testing.expectEqual(true, result.cmd.delete.force);
+    }
+
+    // "pgm delete 100 -f"
+    {
+        const fake_argv = &[_][*:0]const u8{ "pgm", "delete", "100", "-f" };
+        const args = Args{ .vector = fake_argv }; 
+        var iter = Args.Iterator.init(args);
+
+        const result = try parseArgsErgonomic(def, &iter, nullout, nullout);
+        
+        try testing.expect(result.cmd == .delete);
+        try testing.expectEqual(@as(u32, 100), result.cmd.delete.id);
+        try testing.expectEqual(true, result.cmd.delete.force);
+    }
+}
+
+test "Ergonomic POSIX: Global Flags Tunneling" {
+    const def = .{
+        .commands = .{
+            .commit = .{
+                .required = .{ Arg([]const u8, "msg", "Commit message") },
+                .flags = .{ Flag("amend", "a", "Amend previous commit") },
+            },
+        },
+        .flags = .{ Flag("git-dir", "g", "Use custom git dir") },
+        .options = .{ Opt([]const u8, "user", "u", "admin", "User name") },
+    };
+    {
+        const fake_argv = &[_][*:0]const u8{ "pgm", "-g", "commit", "fix bug" };
+        const args = Args{ .vector = fake_argv }; 
+        var iter = Args.Iterator.init(args);
+
+        try testing.expectError(error.UnexpectedArgument, parseArgsErgonomic(def, &iter, nullout, nullout));
+    }
+    
+    // 2. ALLOWED: Flag after Command ("pgm commit -g")
+    // This is the "Tunneling" magic. The parser drills down to 'commit', 
+    // then finds '-g', doesn't recognize it, and checks the parent (Root).
+    {
+        const fake_argv = &[_][*:0]const u8{ "pgm", "commit", "-g", "fix bug" };
+        const args = Args{ .vector = fake_argv }; 
+        var iter = Args.Iterator.init(args);
+
+        const result = try parseArgsErgonomic(def, &iter, nullout, nullout);
+        
+        try testing.expect(result.cmd == .commit);
+        try testing.expectEqual(true, result.@"git-dir"); // Tunneled successfully!
+        try testing.expectEqualStrings("fix bug", result.cmd.commit.msg);
+    }
+}
+
+test "Ergonomic POSIX: Help Detection" {
+    const def = .{ .required = .{ Arg(u32, "num", "A number") } };
+    
+    // "-h"
+    {
+        const fake_argv = &[_][*:0]const u8{ "pgm", "-h" };
+        const args = Args{ .vector = fake_argv }; 
+        var iter = Args.Iterator.init(args);
+        try testing.expectError(error.HelpShown, parseArgsErgonomic(def, &iter, nullout, nullout));
+    }
+    // "--help"
+    {
+        const fake_argv = &[_][*:0]const u8{ "pgm", "--help" };
+        const args = Args{ .vector = fake_argv }; 
+        var iter = Args.Iterator.init(args);
+        try testing.expectError(error.HelpShown, parseArgsErgonomic(def, &iter, nullout, nullout));
+    }
+    // "help" command style
+    {
+        const fake_argv = &[_][*:0]const u8{ "pgm", "help" };
+        const args = Args{ .vector = fake_argv }; 
+        var iter = Args.Iterator.init(args);
+        try testing.expectError(error.HelpShown, parseArgsErgonomic(def, &iter, nullout, nullout));
+    }
+}
+
+test "Ergonomic POSIX: Mixed Flags (-abc)" {
+    const def = .{ .flags = .{
+        Flag("all", "a", "all"),
+        Flag("almostall", "A", "Almost all"),
+        Flag("list", "l", "Listl"),
+        Flag("time", "t", "Sort by time"),
+        },
+    };
+    {
+        const fake_argv = &[_][*:0]const u8{ "pgm", "-aAlt" };
+        const args = Args{ .vector = fake_argv }; 
+        var iter = Args.Iterator.init(args);
+        
+        const result = try parseArgsErgonomic(def, &iter, nullout, nullout);
+        
+        try testing.expectEqual(true, result.all);
+        try testing.expectEqual(true, result.almostall);
+        try testing.expectEqual(true, result.list);
+        try testing.expectEqual(true, result.time);
+    }
+    {
+        const fake_argv = &[_][*:0]const u8{ "pgm", "-aA" };
+        const args = Args{ .vector = fake_argv }; 
+        var iter = Args.Iterator.init(args);
+        
+        const result = try parseArgsErgonomic(def, &iter, nullout, nullout);
+        
+        try testing.expectEqual(true, result.all);
+        try testing.expectEqual(true, result.almostall);
+        try testing.expectEqual(false, result.list);
+        try testing.expectEqual(false, result.time);
+    }
+}
+
+test "Ergonomic POSIX: Attached vs Separated Options" {
+    const def = .{ 
+        .options = .{ 
+            Opt(u64, "port", "p", 8080, "Port"), 
+            Opt([]const u8, "ip", "i", "127.0.0.1", "IP address") 
+        },
+    };
+
+    // "pgm -ilocalhost"
+    {
+        const fake_argv = &[_][*:0]const u8{ "pgm", "-ilocalhost" };
+        const args = Args{ .vector = fake_argv }; 
+        var iter = Args.Iterator.init(args);
+        
+        const result = try parseArgsErgonomic(def, &iter, nullout, nullout);
+        
+        try std.testing.expectEqualStrings("localhost", result.ip);
+        try std.testing.expectEqual(@as(u64, 8080), result.port); 
+    }
+
+    // "pgm -p3000 -i 192.168.1.1"
+    {
+        const fake_argv = &[_][*:0]const u8{ "pgm", "-p3000", "-i", "192.168.1.1" };
+        const args = Args{ .vector = fake_argv }; 
+        var iter = Args.Iterator.init(args);
+        
+        const result = try parseArgsErgonomic(def, &iter, nullout, nullout);
+        
+        try std.testing.expectEqual(@as(u64, 3000), result.port);
+        try std.testing.expectEqualStrings("192.168.1.1", result.ip);
+    }
+
+    // "pgm -i10.0.0.5 --port 9090"
+    {
+        const fake_argv = &[_][*:0]const u8{ "pgm", "-i10.0.0.5", "--port", "9090" };
+        const args = Args{ .vector = fake_argv }; 
+        var iter = Args.Iterator.init(args);
+        
+        const result = try parseArgsErgonomic(def, &iter, nullout, nullout);
+        
+        try std.testing.expectEqualStrings("10.0.0.5", result.ip);
+        try std.testing.expectEqual(@as(u64, 9090), result.port);
+    }
+}
+
+test "Ergonomic POSIX: Conflict - Attached Option vs Flag Bundle" {
+    const def = .{
+        .flags = .{ 
+            Flag("verbose", "v", "Enable verbose output") 
+        },
+        .options = .{ 
+            Opt(u64, "port", "p", 8080, "Port") 
+        },
+    };
+
+    // "pgm -p80"
+    const fake_argv = &[_][*:0]const u8{ "pgm", "-p80" };
+    
+    const args = Args{ .vector = fake_argv }; 
+    var iter = Args.Iterator.init(args);
+    
+    const result = try parseArgsErgonomic(def, &iter, nullout, nullout);
+    
+    try std.testing.expectEqual(@as(u64, 80), result.port);
+    try std.testing.expectEqual(false, result.verbose);
+}

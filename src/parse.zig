@@ -171,24 +171,24 @@ fn printCommandTree(comptime cmds: anytype, writer: anytype, indent: usize) !voi
 }
 
 
-const PeekIterator = struct { 
-    iterator: Args.Iterator,
+pub const PeekIterator = struct { 
+    iterator: *Args.Iterator,
     current: ?[:0]const u8,
 
-    pub fn init(self: @This(), args: *Args.Iterator) void {
+    pub fn init(iter: *Args.Iterator) PeekIterator {
         return PeekIterator{
-            .iterator = &args,
-            .current = self.iterator.next(),
+            .iterator = iter,
+            .current = iter.next(),
         };
     }
 
-    pub fn peek(self: @This()) ?[:0]const u8 {
+    pub fn peek(self: *@This()) ?[:0]const u8 {
         return self.current;
     }
 
-    pub fn next(self: @This()) ?[:0]const u8 {
+    pub fn next(self: *@This()) ?[:0]const u8 {
         const val = self.current;
-        self.current = self.init.next();
+        self.current = self.iterator.next();
         return val; 
     }
 };

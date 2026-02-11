@@ -61,16 +61,16 @@ pub fn main(init: std.process.Init) !void {
     };
     
     //convert the args into a slice
-    const args = try init.minimal.args.toSlice(init.arena.allocator()); 
-    const arguments = argz.parseArgsAllocator(init.gpa, gitu_def, args, stdout, stderr) catch |err| {
-        switch (err) {
-            ParseErrors.HelpShown => try stdout.flush(),
-            else => try stderr.flush(),
-        }    
-        std.process.exit(0);
-    };
-
-    try stdout.print("{any}\n", .{arguments});
+    // const args = try init.minimal.args.toSlice(init.arena.allocator()); 
+    // const arguments = argz.parseArgsAllocator(init.gpa, gitu_def, args, stdout, stderr) catch |err| {
+    //     switch (err) {
+    //         ParseErrors.HelpShown => try stdout.flush(),
+    //         else => try stderr.flush(),
+    //     }    
+    //     std.process.exit(0);
+    // };
+    //
+    // try stdout.print("{any}\n", .{arguments});
     // also, you can do it strict posix
     // var iter = init.minimal.args.iterate(); 
     // const arguments = argz.parseArgsPosix(gitu_def, &iter, stdout, stderr) catch |err| {
@@ -81,6 +81,17 @@ pub fn main(init: std.process.Init) !void {
     //     std.process.exit(0);
     // };
     //
+    //
+    
+    var iter = init.minimal.args.iterate(); 
+    const arguments = argz.parseArgsErgonomic(gitu_def, &iter, stdout, stderr) catch |err| {
+        switch (err) {
+            ParseErrors.HelpShown => try stdout.flush(),
+            else => try stderr.flush(),
+        }    
+        std.process.exit(0);
+    };
+
     if (arguments.verbose) try stdout.print("[LOG] Verbose is ON\n", .{});
     try stdout.print("[CFG] Config path: {s}\n\n", .{arguments.config});
 
