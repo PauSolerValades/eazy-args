@@ -764,6 +764,27 @@ test "POSIX: Conflict - Attached Option vs Flag Bundle" {
     try std.testing.expectEqual(false, result.verbose);
 }
 
+test "POSIX real use case" {
+    const def = .{
+        .name = "v1",
+        .description = "BSKY sim v1",
+        .required = .{
+            Arg([]const u8, "config", "Configuration file for the simulation"),
+            Arg([]const u8, "data", "Data file containing the network definition"),
+        },
+    };
+
+    // "pgm path1 path2"
+    const fake_argv = &[_][*:0]const u8{ "pgm", "path1", "path2"};
+    const args = Args{ .vector = fake_argv }; 
+    var iter = Args.Iterator.init(args);
+
+    const result = try parseArgsPosix(def, &iter, nullout, nullout);
+
+    try testing.expectEqualStrings("path1", result.config);
+    try testing.expectEqualStrings("path2", result.data);
+
+}
 
 
 test "Ergonomic POSIX: Normal parsing (Flags, Options, Required)" {
@@ -1028,4 +1049,26 @@ test "Ergonomic POSIX: Conflict - Attached Option vs Flag Bundle" {
     
     try std.testing.expectEqual(@as(u64, 80), result.port);
     try std.testing.expectEqual(false, result.verbose);
+}
+
+test "Ergonomic POSIX real use case" {
+    const def = .{
+        .name = "v1",
+        .description = "BSKY sim v1",
+        .required = .{
+            Arg([]const u8, "config", "Configuration file for the simulation"),
+            Arg([]const u8, "data", "Data file containing the network definition"),
+        },
+    };
+
+    // "pgm path1 path2"
+    const fake_argv = &[_][*:0]const u8{ "pgm", "path1", "path2"};
+    const args = Args{ .vector = fake_argv }; 
+    var iter = Args.Iterator.init(args);
+
+    const result = try parseArgsErgonomic(def, &iter, nullout, nullout);
+
+    try testing.expectEqualStrings("path1", result.config);
+    try testing.expectEqualStrings("path2", result.data);
+
 }

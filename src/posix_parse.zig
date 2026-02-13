@@ -212,19 +212,21 @@ pub fn parseArgsPosixRecursive(comptime definition: anytype, args: *Args.Iterato
         }
 
         if (has_required) {
-            if (parsed_required >= definition.required.len) {
+            if (parsed_required > definition.required.len) {
                 try stderr.print("Error: UnexpectedArgument '{s}'\n", .{current_arg});
                 return error.UnexpectedArgument;
             }
 
             // no need for a boolean, all the requireds get parsed inmediately
-            inline for (definition.required, 0..) |req, j| {
-                if (j == parsed_required) 
+            found: inline for (definition.required, 0..) |req, j| {
+                if (j == parsed_required) {
                     @field(result, req.field_name) = parse.parseValue(req.type_id, current_arg) catch |err| {
                         try parse.printValueError(stderr, err, req.field_name, current_arg, req.type_id );
                         return err;
                     };
                     parsed_required += 1;
+                    break: found;
+                }
             }
         } else {
             try stderr.print("Error: UnexpectedArgument '{s}'\n", .{current_arg});
@@ -370,19 +372,21 @@ pub fn parseArgsErgonomicRecursive(comptime definition: anytype, iter: *PeekIter
         }
 
         if (has_required) {
-            if (parsed_required >= definition.required.len) {
+            if (parsed_required > definition.required.len) {
                 try stderr.print("Error: UnexpectedArgument '{s}'\n", .{current_arg});
                 return error.UnexpectedArgument;
             }
 
             // no need for a boolean, all the requireds get parsed inmediately
-            inline for (definition.required, 0..) |req, j| {
-                if (j == parsed_required) 
+            found: inline for (definition.required, 0..) |req, j| {
+                if (j == parsed_required) {
                     @field(result, req.field_name) = parse.parseValue(req.type_id, current_arg) catch |err| {
                         try parse.printValueError(stderr, err, req.field_name, current_arg, req.type_id );
                         return err;
                     };
                     parsed_required += 1;
+                    break :found;
+                }
             }
             continue;
         } else {
