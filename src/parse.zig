@@ -36,6 +36,12 @@ pub fn parseValue(comptime T: type, str: []const u8) !T {
             else if (std.mem.eql(u8, str, "false")) { return false; }
             else { return error.InvalidArgument; }
         },
+        .@"enum" => {
+            if (std.meta.stringToEnum(T, str)) |val| {
+                return val;
+            }
+            return error.InvalidValue;
+        },
         .optional => |opt| return try parseValue(opt.child, str), 
         
         else => {
@@ -199,6 +205,11 @@ const talloc = std.testing.allocator;
 const expect = std.testing.expect;
 const expectEqualStrings = std.testing.expectEqualStrings;
 
+const Test = enum {
+    caseOne,
+    caseTwo,
+};
+
 test "parseValue successful" {
     const p1 = try parseValue(u32, "16");
     try expect(@as(u32, 16) == p1);
@@ -229,6 +240,12 @@ test "parseValue successful" {
 
     const p10 = try parseValue([]const u8, "quelcom");
     try expectEqualStrings(p10, "quelcom");
+
+    const p11 = try parseValue(Test, "caseOne");
+    try expect(p11 == .caseOne);
+
+    const p12 = try parseValue(Test, "caseTwo");
+    try expect(p12 == .caseTwo);
 }
 
 const expectError = std.testing.expectError;
@@ -241,6 +258,8 @@ test "parseValue errors" {
     try expectError(ParseIntError.InvalidCharacter, parseValue(u8, "a"));
 
     try expectError(error.InvalidArgument, parseValue(bool, "ture"));
+
+    try expectError(error.InvalidValue, parseValue(Test, "caseThree"));
 }
 
 
